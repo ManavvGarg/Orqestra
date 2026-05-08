@@ -1,6 +1,11 @@
 # Run commands
 
-Full local-dev reference. Run on `houdini`. Browser on laptop via SSH tunnel.
+Quick reference for **developers running Orqestra from source**.
+
+If you just want to install Orqestra: see [docs/INSTALL.md](docs/INSTALL.md).
+If you want to develop / contribute: read [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) first, then come back here.
+
+Examples assume you're on `houdini` with browser on a laptop via SSH tunnel.
 
 ## Env loader (every shell)
 

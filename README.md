@@ -1,104 +1,135 @@
 # Orqestra
 
-Full-stack Docker container orchestration platform.
+Self-hosted container orchestration for **Jupyter notebooks** and **LLMs**, on one box or many.
 
-- Spin up isolated **Jupyter Notebook** containers (Base / TensorFlow / PyTorch / R) with persistent volumes, served via subdomain + token.
-- Deploy **static sites** from a GitHub URL — clone → build → upload to Cloudflare R2 → serve at a subdomain.
-- Real-time build/run logs streamed over native WebSockets.
-- Manage everything from a Next.js 15 dashboard.
+- Spin up isolated **Jupyter containers** (Base / TensorFlow / PyTorch / R) with persistent volumes, served at `https://<slug>.<domain>` with token auth.
+- Host **LLMs** through Ollama or Docker Model Runner — search the live catalog, pick a model + tag, container exposes an OpenAI-compatible API at `/v1/chat/completions`.
+- Live **container logs** + **resource stats** streamed to the dashboard via WebSockets.
+- **File explorer** to browse + download files inside any Jupyter container.
+- Full **TLS** via Traefik + Let's Encrypt + Cloudflare DNS-01.
+- Multi-tenant with auth (Better Auth), tags, multi-select bulk delete.
+
+---
+
+## Install
+
+One command — Linux or macOS, x64 or arm64:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/manavvgarg/Orqestra/main/scripts/install.sh | bash
+```
+
+Picks per-arch binary, runs interactive installer.
+
+Two install modes:
+
+| Mode | Use when | What you get |
+|------|----------|--------------|
+| **local** | Laptop / dev box | Plain HTTP, ports on localhost, no domain |
+| **server** | Public host | HTTPS via Traefik, wildcard DNS, full feature set |
+
+Full walkthrough: **[docs/INSTALL.md](docs/INSTALL.md)**.
+
+---
 
 ## Stack
 
 | Layer | Tech |
-|---|---|
-| Monorepo | Turborepo + pnpm workspaces |
-| API | Bun + Hono + tRPC v11 |
-| Auth | Better Auth (Drizzle adapter) |
-| WebSockets | Bun native WS |
-| Orchestrators | Go 1.23 + Gin + Docker SDK |
-| Edge | Cloudflare Workers + Hyperdrive + R2 |
-| Web | Next.js 15 (App Router) + shadcn-style + Tailwind v4 |
-| DB | PostgreSQL + Drizzle ORM |
-| Queue | BullMQ on Redis |
-| Reverse proxy | Traefik v3 + Let's Encrypt (Cloudflare DNS) |
-| Logs | Pino |
+|-------|------|
+| Web | Next.js 15 (App Router), Tailwind v4, shadcn-style |
+| API | Bun + Hono + tRPC v11 + Better Auth + BullMQ |
+| WebSocket | Bun native WS — fans Redis pubsub to browser |
+| Orchestrators | Go + Gin + Docker SDK (one for Jupyter, one for hosting/models) |
+| Reverse proxy | Traefik v3 + Let's Encrypt (DNS-01 via Cloudflare) |
+| Data | PostgreSQL 17 + Drizzle ORM, Redis 7 |
+| Catalog | Live `docker model search` + Hub API + Ollama scrape |
+| Edge | Cloudflare Worker (optional, for static-site hosting feature) |
 
-## Layout
+---
+
+## Architecture
+
+```
+                 browser
+                    │
+                    ▼
+   ┌──────── Traefik (server mode) ────────┐
+   │  *.{domain} → routes by Host header   │
+   └─┬───────────────┬───────┬─────────────┘
+     │               │       │
+     ▼               ▼       ▼
+   web (3000)    api (4000)  ws (4001)
+                     │              │
+                     │  ┌───────────┘
+                     ▼  ▼
+                  Postgres + Redis
+                     │
+                     ├─→ orchestrator-jupyter (8080) ─→ Docker socket
+                     │      └─ creates jupyter/* containers, manages volumes
+                     │
+                     └─→ orchestrator-hosting (8081) ─→ Docker socket
+                            ├─ creates ollama/ollama containers per model
+                            ├─ talks to Docker Model Runner via /v1/...
+                            └─ scrapes Hub + Ollama for live catalog
+```
+
+Container logs + build progress stream:
+```
+container stdout/stderr
+  → orchestrator's logtail goroutine (docker logs -f)
+  → Redis PUBLISH container-logs:<projectId>
+  → ws server PSUBSCRIBE container-logs:*
+  → browser WebSocket
+```
+
+---
+
+## Repo layout
 
 ```
 apps/
-  api/                  # Bun + Hono + tRPC + BullMQ workers
-  ws/                   # Bun WebSocket log streamer
-  orchestrator-jupyter/ # Go + Gin Jupyter container manager
-  orchestrator-hosting/ # Go + Gin hosting builder
-  edge-proxy/           # Cloudflare Worker (subdomain → R2)
-  web/                  # Next.js 15 dashboard
+  api/                  Bun + Hono + tRPC + BullMQ workers
+  ws/                   Bun WebSocket fan-out
+  orchestrator-jupyter/ Go + Gin (Jupyter container manager)
+  orchestrator-hosting/ Go + Gin (LLM hosting + catalog)
+  edge-proxy/           Cloudflare Worker (subdomain → R2, optional)
+  web/                  Next.js 15 dashboard
+  installer/            Bun-compiled single-binary installer
 packages/
-  db/                   # Drizzle schema + client
-  trpc/                 # Shared tRPC routers + types
-  env/                  # t3-env validated env schemas
+  db/                   Drizzle schema + client
+  trpc/                 Shared routers + types
+  env/                  t3-env validated env schemas
+  models/               Catalog refresh logic
 docker/
-  traefik/              # Traefik config
-  jupyter-images/       # Optional custom Jupyter images
-  hosting-builder/      # Builder runner image
+  traefik/              Traefik config + acme.json
+  jupyter-images/       Optional custom Jupyter images
+  hosting-builder/      Static-site builder (R2 hosting)
+scripts/
+  install.sh            curl-bash bootstrap
+docs/                   Documentation
 docker-compose.yml
 turbo.json
 pnpm-workspace.yaml
 ```
 
-## Quick start
+---
 
-```bash
-# 1. Install
-pnpm install
+## Documentation
 
-# 2. Bootstrap secrets
-cp .env.example .env
-# generate two 32+ char random strings:
-openssl rand -hex 32   # → BETTER_AUTH_SECRET
-openssl rand -hex 32   # → INTERNAL_API_SECRET
+- **[docs/INSTALL.md](docs/INSTALL.md)** — End-user install walkthrough
+- **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** — Clone the repo, run from source, contribute
+- **[docs/RELEASING.md](docs/RELEASING.md)** — Maintainer: build binaries, tag, publish releases
+- **[RUN_COMMANDS.md](RUN_COMMANDS.md)** — Quick reference for all dev commands
+- **[BUILDER.md](BUILDER.md)** — Original spec (kept for reference)
 
-# 3. Create the shared Docker network (once)
-docker network create proxy
+---
 
-# 4. Build the hosting-builder image (used by orchestrator-hosting)
-docker compose --profile build-only build hosting-builder-image
+## Status
 
-# 5. Boot infra
-docker compose up -d postgres redis traefik
+v0.1 — single-server, single-org. Mature local-dev path; server install tested with Cloudflare DNS-01. SaaS multi-tenant is not yet supported (one user pool per install).
 
-# 6. Push DB schema
-pnpm --filter @orqestra/db db:push
+---
 
-# 7. Boot the rest in dev
-pnpm dev
-```
+## License
 
-Local URLs:
-
-| Service | URL |
-|---|---|
-| Web | http://localhost:3000 |
-| API | http://localhost:4000 |
-| WS | http://localhost:4001 |
-| Orchestrator (Jupyter) | http://localhost:8080 |
-| Orchestrator (Hosting) | http://localhost:8081 |
-
-## Production
-
-1. DNS — Cloudflare wildcard record `*.${SITE_DOMAIN} → server IP` (orange-cloud).
-2. Issue an API token with **Zone.DNS Edit** for the cert resolver.
-3. `docker compose up -d` boots everything; Traefik handles TLS via DNS-01.
-4. The Cloudflare Worker (`apps/edge-proxy`) only matters once you flip subdomains for **hosting** projects to the edge. For self-hosted-only setups, skip it — Traefik already handles `*.${SITE_DOMAIN}`.
-
-## Security
-
-- All Go orchestrators require `X-Internal-Secret: ${INTERNAL_API_SECRET}`.
-- `docker.sock` is mounted **only** in orchestrator services, never in the API.
-- tRPC `protectedProcedure` middleware blocks unauthenticated calls.
-- Hono rate limiter caps 100 req / 5 min / IP on the API.
-- Jupyter tokens are 16 random bytes (32 hex chars).
-- WebSocket `subscribe` messages must include a valid session ID.
-- GitHub URLs are regex-validated before clone.
-
-See `BUILDER.md` for the full build spec.
+See [LICENSE](LICENSE).
