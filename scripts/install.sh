@@ -4,7 +4,7 @@
 #         curl -fsSL https://install.orqestra.xyz | bash -s -- --version v0.1.0
 set -euo pipefail
 
-REPO="${ORQESTRA_INSTALLER_REPO:-orqestra/orqestra}"
+REPO="${ORQESTRA_INSTALLER_REPO:-manavvgarg/Orqestra}"
 VERSION="${ORQESTRA_INSTALLER_VERSION:-latest}"
 
 while [ $# -gt 0 ]; do

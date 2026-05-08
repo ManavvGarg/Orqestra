@@ -7,7 +7,7 @@ import { hasPasswordlessSudo, sudoAvailable, isRoot } from "./lib/sudo";
 import { log } from "./lib/log";
 import type { InstallConfig, InstallMode, SudoMode, GpuChoice, DnsMode } from "./types";
 
-const DEFAULT_REPO = "https://github.com/orqestra/orqestra.git";
+const DEFAULT_REPO = "https://github.com/manavvgarg/Orqestra.git";
 const DEFAULT_REF = "main";
 
 async function detectGpu(): Promise<boolean> {
