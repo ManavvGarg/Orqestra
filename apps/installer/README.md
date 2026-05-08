@@ -5,7 +5,7 @@ Single-binary installer for Orqestra. Bun-compiled, ~30 MB per arch. End-user do
 ## How users run it
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/manavvgarg/Orqestra/main/scripts/install.sh | bash
+curl -fsSL https://orqestra.xyz/install | bash
 ```
 
 `scripts/install.sh` (in repo root) detects OS+arch, aborts on Windows, downloads the matching binary from the latest GitHub release, runs it.

@@ -16,7 +16,7 @@ The installer can install Docker + NVIDIA Container Toolkit for you (with sudo).
 ## One-liner
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/manavvgarg/Orqestra/main/scripts/install.sh | bash
+curl -fsSL https://orqestra.xyz/install | bash
 ```
 
 What that does:
@@ -29,8 +29,7 @@ What that does:
 To pin a specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/manavvgarg/Orqestra/main/scripts/install.sh \
-  | bash -s -- --version v0.1.0
+curl -fsSL https://orqestra.xyz/install | bash -s -- --version v0.1.0
 ```
 
 ## What the installer asks you

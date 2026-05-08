@@ -16,7 +16,7 @@ Self-hosted container orchestration for **Jupyter notebooks** and **LLMs**, on o
 One command — Linux or macOS, x64 or arm64:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/manavvgarg/Orqestra/main/scripts/install.sh | bash
+curl -fsSL https://orqestra.xyz/install | bash
 ```
 
 Picks per-arch binary, runs interactive installer.
