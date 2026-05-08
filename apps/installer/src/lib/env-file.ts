@@ -47,6 +47,25 @@ export async function writeEnvFile(cfg: InstallConfig): Promise<string> {
     );
   }
 
+  if (isLocal) {
+    lines.push(
+      "",
+      "# --- Local-mode overrides (binds containers on LAN if set) ---",
+      "LOCAL_BIND_IP=",
+      "LOCAL_PUBLIC_HOST=",
+    );
+  } else {
+    lines.push(
+      "",
+      "# --- Reserved RAM scheduler keeps off model budget (MB) ---",
+      "RESERVED_RAM_MB=2048",
+    );
+  }
+
+  if (cfg.letsEncryptEmail) {
+    lines.push("", `LETSENCRYPT_EMAIL=${cfg.letsEncryptEmail}`);
+  }
+
   if (cfg.anthropicApiKey) {
     lines.push("", "# --- Diagnostics (optional) ---", `ANTHROPIC_API_KEY=${cfg.anthropicApiKey}`);
   }

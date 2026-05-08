@@ -13,6 +13,9 @@ async function main() {
 
   const config = await collectConfig();
 
+  // Filter steps by config (server-only / GPU-only / DNS-mode-specific drop out).
+  const steps = allSteps.filter((s) => (s.appliesTo ? s.appliesTo(config) : true));
+
   const ctx: StepContext = {
     config,
     installDir: config.installDir,
@@ -23,19 +26,21 @@ async function main() {
   const completed = new Set(prior?.completedSteps ?? []);
   if (prior && completed.size > 0) {
     const resume = await confirm({
-      message: `Found ${completed.size} previously-completed steps. Resume from where it left off?`,
+      message: `Found ${completed.size} previously-completed steps in ${config.installDir}. Resume?`,
       initialValue: true,
     });
     bail(resume);
     if (!resume) completed.clear();
   }
 
-  const total = allSteps.length;
+  log.section(`Running ${steps.length} steps`);
+
+  const total = steps.length;
   let i = 0;
-  for (const step of allSteps) {
+  for (const step of steps) {
     i++;
     if (completed.has(step.id)) {
-      log.step(i, total, kleur.gray(`${step.title} (skipped — already done)`));
+      log.step(i, total, kleur.gray(`${step.title} — skipped (already done)`));
       continue;
     }
     log.step(i, total, step.title);
@@ -65,10 +70,22 @@ async function runStepWithRecovery(
   ctx: StepContext,
   config: InstallConfig,
 ): Promise<boolean> {
+  // Skip if pre-check passes.
+  if (step.check) {
+    try {
+      if (await step.check(ctx)) {
+        log.ok(`${step.title} — already satisfied`);
+        return true;
+      }
+    } catch {
+      /* check itself errored — fall through to run */
+    }
+  }
   while (true) {
     const result = await step.run(ctx);
     if (result.ok) {
-      log.ok(result.note ? `${step.title} — ${result.note}` : step.title);
+      const tail = result.skipped ? kleur.gray(" (skipped)") : "";
+      log.ok((result.note ? `${step.title} — ${result.note}` : step.title) + tail);
       return true;
     }
 
@@ -80,7 +97,13 @@ async function runStepWithRecovery(
       options: [
         { value: "retry", label: "Retry the same step" },
         ...(config.anthropicApiKey
-          ? [{ value: "diagnose" as const, label: "Diagnose with AI", hint: "needs ANTHROPIC_API_KEY" }]
+          ? [
+              {
+                value: "diagnose" as const,
+                label: "Diagnose with AI",
+                hint: "Claude tries to fix it",
+              },
+            ]
           : []),
         { value: "skip", label: "Skip and continue (advanced)" },
         { value: "abort", label: "Abort install" },
@@ -114,20 +137,46 @@ async function runStepWithRecovery(
 
 function printSuccess(config: InstallConfig) {
   console.log();
-  log.done("Orqestra is up.");
+  log.done("Orqestra is live.");
+
+  console.log(kleur.bold("  URLs"));
   if (config.mode === "local") {
-    console.log("  Web:  http://localhost:3000");
-    console.log("  API:  http://localhost:4000");
-    console.log("  WS:   ws://localhost:4001");
+    console.log("    Web:        http://localhost:3000");
+    console.log("    API:        http://localhost:4000");
+    console.log("    WebSocket:  ws://localhost:4001");
   } else {
-    console.log(`  Web:  https://${config.siteDomain}`);
-    console.log(`  API:  https://api.${config.siteDomain}`);
-    console.log(`  WS:   wss://ws.${config.siteDomain}`);
+    console.log(`    Web:        https://${config.siteDomain}`);
+    console.log(`    API:        https://api.${config.siteDomain}`);
+    console.log(`    WebSocket:  wss://ws.${config.siteDomain}`);
     console.log();
-    console.log("  TLS will issue on first request — first hits may be slow while the cert is provisioned.");
+    console.log(kleur.gray("    First HTTPS request triggers Let's Encrypt cert issuance via DNS-01."));
+    console.log(kleur.gray("    DNS propagation + ACME usually takes 30–60 seconds."));
   }
+
   console.log();
-  console.log("  Manage with:  docker compose -f " + config.installDir + "/docker-compose.yml [logs|ps|down]");
+  console.log(kleur.bold("  Next"));
+  console.log(`    1. Open the Web URL and register the first user (becomes admin).`);
+  console.log(`    2. Manage the stack:`);
+  console.log(
+    kleur.cyan(`         docker compose -f ${config.installDir}/docker-compose.yml ps`),
+  );
+  console.log(
+    kleur.cyan(`         docker compose -f ${config.installDir}/docker-compose.yml logs -f`),
+  );
+  console.log(`    3. Re-run this installer any time — it resumes / upgrades safely.`);
+
+  if (config.mode === "server" && config.dns === "manual") {
+    console.log();
+    console.log(kleur.yellow("  Reminder: wildcard DNS is on you to maintain."));
+  }
+  if (config.gpu === "auto") {
+    console.log();
+    console.log(
+      kleur.gray(
+        "  GPU note: containers using --gpus need an active session — re-login if `docker run --gpus all ...` errors with permission denied.",
+      ),
+    );
+  }
   console.log();
 }
 

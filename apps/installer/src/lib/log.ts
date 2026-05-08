@@ -9,9 +9,25 @@ export const log = {
     console.log(kleur.gray(`[${n}/${total}]`), kleur.bold(title)),
   raw: (msg: string) => console.log(msg),
   banner: () => {
+    const lines = [
+      "",
+      kleur.bold().cyan("  ▲ Orqestra installer"),
+      kleur.gray("    Self-hosted container orchestration for notebooks + LLMs."),
+      "",
+      kleur.gray("    What this does:"),
+      kleur.gray("      • Pulls the source, writes a validated .env"),
+      kleur.gray("      • Boots Postgres + Redis + Traefik (server) or just Postgres + Redis (local)"),
+      kleur.gray("      • Builds + starts api / ws / web / orchestrators"),
+      kleur.gray("      • Verifies health"),
+      "",
+      kleur.gray("    You can re-run this any time — it resumes from the last good step."),
+      "",
+    ];
+    for (const l of lines) console.log(l);
+  },
+  section: (label: string) => {
     console.log();
-    console.log(kleur.bold().cyan("  ▲ Orqestra installer"));
-    console.log(kleur.gray("    Container orchestration, self-hosted."));
+    console.log(kleur.bold().underline(label));
     console.log();
   },
   done: (msg: string) => console.log(kleur.green().bold("\n  ✓ ") + msg + "\n"),
