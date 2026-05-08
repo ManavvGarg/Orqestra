@@ -1,0 +1,509 @@
+[
+  {
+    "repo": "deepcoder-preview",
+    "available_tags": [
+      "latest",
+      "14B-F16",
+      "14B-Q4_K_M"
+    ]
+  },
+  {
+    "repo": "deepseek-r1-distill-llama",
+    "available_tags": [
+      "latest",
+      "70B-Q4_0",
+      "8B-Q4_0",
+      "70B-Q4_K_M",
+      "8B-F16",
+      "8B-Q4_K_M"
+    ]
+  },
+  {
+    "repo": "devstral-small",
+    "available_tags": [
+      "latest",
+      "24B",
+      "24B-UD-Q4_K_XL"
+    ]
+  },
+  {
+    "repo": "devstral-small-2",
+    "available_tags": [
+      "latest",
+      "24B",
+      "24B-Instruct-UD-Q4_K_XL"
+    ]
+  },
+  {
+    "repo": "embeddinggemma",
+    "available_tags": [
+      "latest",
+      "300M-Q8_0"
+    ]
+  },
+  {
+    "repo": "functiongemma",
+    "available_tags": [
+      "latest",
+      "F16-270M",
+      "Q4_K_XL-270M",
+      "F16"
+    ]
+  },
+  {
+    "repo": "gemma3",
+    "available_tags": [
+      "latest",
+      "4B-Q4_K_M",
+      "4B-F16",
+      "270M-UD-IQ2_XXS",
+      "4B",
+      "270M-UD-Q4_K_XL",
+      "270M-F16",
+      "4B-Q4_0",
+      "1B-F16",
+      "1B-Q4_K_M"
+    ]
+  },
+  {
+    "repo": "gemma3-qat",
+    "available_tags": [
+      "latest",
+      "4B-UD-Q4_K_XL",
+      "4B-BF16",
+      "4B",
+      "27B-UD-Q4_K_XL",
+      "12B-Q4_K_M",
+      "12B-UD-Q4_K_XL",
+      "270M-UD-Q4_K_XL",
+      "270M-F16",
+      "27B-Q4_K_M",
+      "4B-Q4_K_M",
+      "1B-Q4_K_M"
+    ]
+  },
+  {
+    "repo": "gemma3n",
+    "available_tags": [
+      "latest",
+      "2B-F16",
+      "2B-Q4_K_M",
+      "4B-F16",
+      "4B-Q4_K_M"
+    ]
+  },
+  {
+    "repo": "gemma4",
+    "available_tags": [
+      "latest",
+      "31B",
+      "E2B",
+      "E4B",
+      "26B",
+      "4B-Q4_K_XL",
+      "4B"
+    ]
+  },
+  {
+    "repo": "glm-4.7-flash",
+    "available_tags": [
+      "latest",
+      "31B-UD-Q4_K_XL",
+      "31B",
+      "31B-UD-Q8_K_XL"
+    ]
+  },
+  {
+    "repo": "gpt-oss",
+    "available_tags": [
+      "latest",
+      "20B",
+      "20B-UD-Q4_K_XL",
+      "20B-UD-Q6_K_XL",
+      "20B-UD-Q8_K_XL",
+      "120B-UD-Q4_K_XL",
+      "120B-MXFP4",
+      "20B-F16",
+      "20B-MXFP4"
+    ]
+  },
+  {
+    "repo": "gpt-oss-safeguard",
+    "available_tags": [
+      "latest",
+      "120B-UD-Q4_K_XL",
+      "20B-MXFP4",
+      "20B",
+      "20B-UD-Q8_K_XL",
+      "20B-F16",
+      "20B-UD-Q4_K_XL"
+    ]
+  },
+  {
+    "repo": "granite-4.0-h-micro",
+    "available_tags": [
+      "latest",
+      "3B-Q4_K_M",
+      "3B"
+    ]
+  },
+  {
+    "repo": "granite-4.0-h-nano",
+    "available_tags": [
+      "latest",
+      "1B-Q8_0",
+      "1B",
+      "350M-Q8_0"
+    ]
+  },
+  {
+    "repo": "granite-4.0-h-small",
+    "available_tags": [
+      "latest",
+      "32B",
+      "32B-Q4_K_M"
+    ]
+  },
+  {
+    "repo": "granite-4.0-h-tiny",
+    "available_tags": [
+      "latest",
+      "7B",
+      "7B-Q4_K_M"
+    ]
+  },
+  {
+    "repo": "granite-4.0-micro",
+    "available_tags": [
+      "latest",
+      "3B-Q4_K_M",
+      "3B"
+    ]
+  },
+  {
+    "repo": "granite-4.0-nano",
+    "available_tags": [
+      "latest",
+      "1B-BF16",
+      "350M-BF16",
+      "1B"
+    ]
+  },
+  {
+    "repo": "granite-docling",
+    "available_tags": [
+      "latest",
+      "258M",
+      "258M-F16",
+      "258M-Q8_0"
+    ]
+  },
+  {
+    "repo": "granite-embedding-multilingual",
+    "available_tags": [
+      "latest",
+      "278M-F16"
+    ]
+  },
+  {
+    "repo": "kimi-k2",
+    "available_tags": [
+      "latest",
+      "1T-thinking",
+      "1T",
+      "1T-UD-Q4_K_XL"
+    ]
+  },
+  {
+    "repo": "kimi-k2.6",
+    "available_tags": [
+      "latest",
+      "1.1T"
+    ]
+  },
+  {
+    "repo": "llama3.1",
+    "available_tags": [
+      "latest",
+      "8B-F16",
+      "8B-Q4_K_M"
+    ]
+  },
+  {
+    "repo": "llama3.2",
+    "available_tags": [
+      "latest",
+      "3B-Q4_0",
+      "1B-Q4_0",
+      "3B-F16",
+      "3B-Q4_K_M",
+      "1B-F16",
+      "1B-Q8_0"
+    ]
+  },
+  {
+    "repo": "llama3.3",
+    "available_tags": [
+      "latest",
+      "70B-Q4_0",
+      "70B-Q4_K_M"
+    ]
+  },
+  {
+    "repo": "magistral-small-3.2",
+    "available_tags": [
+      "latest",
+      "24B-UD-Q4_K_XL",
+      "24B",
+      "24B-UD-IQ2_XXS"
+    ]
+  },
+  {
+    "repo": "ministral3",
+    "available_tags": [
+      "latest",
+      "8B-Q4_K_M",
+      "8B-BF16",
+      "3B-Q4_K_M",
+      "8B",
+      "3B-BF16",
+      "14B",
+      "14B-UD-Q8_K_XL",
+      "14B-BF16",
+      "14B-UD-Q4_K_XL"
+    ]
+  },
+  {
+    "repo": "mistral",
+    "available_tags": [
+      "latest",
+      "7B-Q4_0",
+      "7B-F16",
+      "7B-Q4_K_M"
+    ]
+  },
+  {
+    "repo": "mistral-nemo",
+    "available_tags": [
+      "latest",
+      "12B-Q4_K_M"
+    ]
+  },
+  {
+    "repo": "mistral-small4",
+    "available_tags": [
+      "latest",
+      "119B"
+    ]
+  },
+  {
+    "repo": "moondream2",
+    "available_tags": [
+      "latest",
+      "1.5B",
+      "1.5B-F16"
+    ]
+  },
+  {
+    "repo": "mxbai-embed-large",
+    "available_tags": [
+      "latest",
+      "335M-F16"
+    ]
+  },
+  {
+    "repo": "nemotron3",
+    "available_tags": [
+      "latest",
+      "30B"
+    ]
+  },
+  {
+    "repo": "nomic-embed-text-v1.5",
+    "available_tags": [
+      "latest",
+      "137M-F16"
+    ]
+  },
+  {
+    "repo": "nomic-embed-text-v2-moe",
+    "available_tags": [
+      "latest",
+      "475M"
+    ]
+  },
+  {
+    "repo": "phi4",
+    "available_tags": [
+      "latest",
+      "14B-Q4_0",
+      "14B-F16",
+      "14B-Q4_K_M"
+    ]
+  },
+  {
+    "repo": "qwen2.5",
+    "available_tags": [
+      "latest",
+      "7B-Q4_0",
+      "3B-F16",
+      "3B-Q4_K_M",
+      "1.5B-F16",
+      "0.5B-F16",
+      "7B-F16",
+      "7B-Q4_K_M"
+    ]
+  },
+  {
+    "repo": "qwen3",
+    "available_tags": [
+      "latest",
+      "4B-F16",
+      "4B-UD-Q8_K_XL",
+      "4B-UD-Q4_K_XL",
+      "14B-Q6_K",
+      "30B-A3B-F16",
+      "30B-A3B-Q4_K_M",
+      "0.6B-Q4_0",
+      "0.6B-F16",
+      "0.6B-Q4_K_M",
+      "8B-Q4_0",
+      "8B-F16",
+      "8B-Q4_K_M"
+    ]
+  },
+  {
+    "repo": "qwen3-coder",
+    "available_tags": [
+      "latest",
+      "30B",
+      "30B-A3B-UD-Q4_K_XL"
+    ]
+  },
+  {
+    "repo": "qwen3-coder-next",
+    "available_tags": [
+      "latest",
+      "80B",
+      "80B-Q8_0",
+      "80B-Q4_K_M",
+      "80B-Q5_K_M"
+    ]
+  },
+  {
+    "repo": "qwen3-embedding",
+    "available_tags": [
+      "latest",
+      "8B-Q4_K_M",
+      "8B-F16",
+      "4B-Q4_K_M",
+      "4B-F16",
+      "4B",
+      "0.6B-F16"
+    ]
+  },
+  {
+    "repo": "qwen3-reranker",
+    "available_tags": [
+      "latest",
+      "4B",
+      "8B",
+      "0.6B"
+    ]
+  },
+  {
+    "repo": "qwen3-vl",
+    "available_tags": [
+      "latest",
+      "8B-UD-Q4_K_XL",
+      "8B",
+      "8B-Q8_K_XL",
+      "8B-BF16",
+      "4B-UD-Q4_K_XL",
+      "4B-Q8_K_XL",
+      "4B-BF16",
+      "32B-UD-Q4_K_XL",
+      "2B-UD-Q4_K_XL",
+      "32B-Q8_K_XL",
+      "2B-Q8_K_XL",
+      "2B-BF16"
+    ]
+  },
+  {
+    "repo": "qwen3.5",
+    "available_tags": [
+      "latest",
+      "9B-UD-Q4_K_XL",
+      "4B-UD-Q4_K_XL",
+      "35B-A3B-Q4_K_M",
+      "27B-UD-Q4_K_XL",
+      "397B",
+      "397B-UD-Q4_K_XL"
+    ]
+  },
+  {
+    "repo": "qwen3.6",
+    "available_tags": [
+      "latest",
+      "27B",
+      "35B-A3B-UD-Q4_K_M",
+      "35B"
+    ]
+  },
+  {
+    "repo": "qwq",
+    "available_tags": [
+      "latest",
+      "32B-Q4_0",
+      "32B-F16",
+      "32B-Q4_K_M"
+    ]
+  },
+  {
+    "repo": "seed-oss",
+    "available_tags": [
+      "latest",
+      "36B-UD-Q4_K_XL",
+      "36B-UD-IQ1_M",
+      "36B-UD-Q6_K_XL"
+    ]
+  },
+  {
+    "repo": "smollm2",
+    "available_tags": [
+      "latest",
+      "135M-Q4_K_M",
+      "360M-Q4_K_M",
+      "135M-Q2_K",
+      "360M-F16",
+      "360M-Q4_0",
+      "135M-Q4_0",
+      "135M-F16"
+    ]
+  },
+  {
+    "repo": "smollm3",
+    "available_tags": [
+      "latest",
+      "Q8_0",
+      "Q4_K_M",
+      "F16"
+    ]
+  },
+  {
+    "repo": "smolvlm",
+    "available_tags": [
+      "latest",
+      "500M",
+      "500M-F16",
+      "500M-Q8_0"
+    ]
+  },
+  {
+    "repo": "stable-diffusion",
+    "available_tags": [
+      "latest",
+      "Q4"
+    ]
+  }
+]

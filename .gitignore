@@ -1,0 +1,35 @@
+node_modules
+.pnpm-store
+.turbo
+dist
+build
+.next
+out
+*.log
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Go
+*.exe
+*.test
+*.out
+vendor/
+**/orchestrator-jupyter/orchestrator
+**/orchestrator-hosting/orchestrator
+
+# OS / editor
+.DS_Store
+.idea
+.vscode
+
+# Drizzle
+drizzle/
+
+# Docker
+docker/traefik/acme.json
+
+# Cloudflare
+.wrangler
+.dev.vars

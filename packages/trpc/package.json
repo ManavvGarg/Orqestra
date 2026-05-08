@@ -1,0 +1,23 @@
+{
+  "name": "@orqestra/trpc",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./router": "./src/router.ts",
+    "./context": "./src/context.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@orqestra/db": "workspace:*",
+    "@trpc/server": "^11.0.0-rc.660",
+    "superjson": "^2.2.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}

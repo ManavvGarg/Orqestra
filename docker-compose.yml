@@ -1,0 +1,168 @@
+services:
+  traefik:
+    image: traefik:v3.2
+    restart: unless-stopped
+    command:
+      - --configFile=/etc/traefik/traefik.yml
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./docker/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./docker/traefik/acme.json:/acme.json
+    environment:
+      CF_DNS_API_TOKEN: ${CF_DNS_API_TOKEN}
+      SITE_DOMAIN: ${SITE_DOMAIN}
+    networks: [proxy]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`traefik.${SITE_DOMAIN}`)"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.dashboard.service=api@internal"
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: orqestra
+      POSTGRES_USER: orqestra
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks: [proxy]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orqestra -d orqestra"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    networks: [proxy]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET}
+      ORCHESTRATOR_JUPYTER_URL: ${ORCHESTRATOR_JUPYTER_URL}
+      ORCHESTRATOR_HOSTING_URL: ${ORCHESTRATOR_HOSTING_URL}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
+      R2_BUCKET_NAME: ${R2_BUCKET_NAME}
+      R2_PUBLIC_URL: ${R2_PUBLIC_URL}
+      R2_ENDPOINT: ${R2_ENDPOINT}
+      SITE_DOMAIN: ${SITE_DOMAIN}
+    networks: [proxy]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.rule=Host(`api.${SITE_DOMAIN}`)"
+      - "traefik.http.routers.api.entrypoints=websecure"
+      - "traefik.http.routers.api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.api.loadbalancer.server.port=4000"
+
+  ws:
+    build:
+      context: .
+      dockerfile: apps/ws/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 4001
+      REDIS_URL: ${REDIS_URL}
+      DATABASE_URL: ${DATABASE_URL}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      SITE_DOMAIN: ${SITE_DOMAIN}
+    networks: [proxy]
+    depends_on:
+      redis: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ws.rule=Host(`ws.${SITE_DOMAIN}`)"
+      - "traefik.http.routers.ws.entrypoints=websecure"
+      - "traefik.http.routers.ws.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ws.loadbalancer.server.port=4001"
+
+  orchestrator-jupyter:
+    build:
+      context: apps/orchestrator-jupyter
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      PORT: 8080
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET}
+      SITE_DOMAIN: ${SITE_DOMAIN}
+      TRAEFIK_NETWORK: proxy
+    networks: [proxy]
+
+  orchestrator-hosting:
+    build:
+      context: apps/orchestrator-hosting
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      PORT: 8080
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET}
+      SITE_DOMAIN: ${SITE_DOMAIN}
+      TRAEFIK_NETWORK: proxy
+      OLLAMA_IMAGE: ollama/ollama:latest
+      LOCAL_BIND_IP: ${LOCAL_BIND_IP:-}
+      LOCAL_PUBLIC_HOST: ${LOCAL_PUBLIC_HOST:-}
+    networks: [proxy]
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL}
+    networks: [proxy]
+    depends_on:
+      - api
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.web.rule=Host(`${SITE_DOMAIN}`) || Host(`www.${SITE_DOMAIN}`)"
+      - "traefik.http.routers.web.entrypoints=websecure"
+      - "traefik.http.routers.web.tls.certresolver=letsencrypt"
+      - "traefik.http.services.web.loadbalancer.server.port=3000"
+
+networks:
+  proxy:
+    external: true
+
+volumes:
+  postgres-data:
+  redis-data:
