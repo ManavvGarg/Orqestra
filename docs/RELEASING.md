@@ -185,7 +185,7 @@ If `install.sh` itself broke (e.g. arch detection regression), fix it on `main` 
 
 ## Optional — branded short URL
 
-If you want `install.orqestra.xyz` as the curl target:
+If you want `orqestra.xyz/install.sh` as the curl target:
 
 ### Cloudflare Worker
 
@@ -214,12 +214,12 @@ npx wrangler deploy --name orqestra-install worker.js
 
 ### Route
 
-In Cloudflare dashboard: **Workers & Pages → orqestra-install → Triggers → Custom Domains** → add `install.orqestra.xyz`.
+In Cloudflare dashboard: **Workers & Pages → orqestra-install → Triggers → Custom Domains** → add `orqestra.xyz/install.sh`.
 
 After DNS propagation, this works:
 
 ```bash
-curl -fsSL https://install.orqestra.xyz | bash
+curl -fsSL https://orqestra.xyz/install.sh | bash
 ```
 
 300-second cache means a freshly-pushed `install.sh` change takes up to 5 minutes to reach end users. Force purge in CF dashboard if needed.
