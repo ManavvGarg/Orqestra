@@ -6,7 +6,7 @@ export const dbPushStep: Step = {
   title: "Push database schema",
   async run({ installDir }) {
     const r = await sh(
-      `docker compose run --rm api sh -lc 'cd /repo/packages/db && bunx drizzle-kit push --config drizzle.config.ts || pnpm drizzle-kit push'`,
+      `docker compose run --rm api sh -lc 'cd /repo/packages/db && bunx drizzle-kit push --force --config drizzle.config.ts || pnpm drizzle-kit push --force'`,
       { cwd: installDir, timeoutMs: 5 * 60 * 1000 },
     );
     if (!r.ok) {
