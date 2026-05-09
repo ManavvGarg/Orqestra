@@ -138,10 +138,10 @@ Use semver:
 ## Publishing the release
 
 ```bash
-gh release create v0.2.0 \
+gh release create v1.0.0 \
   --repo manavvgarg/Orqestra \
-  --title "Orqestra v0.2.0" \
-  --notes "..." \
+  --title "Orqestra v1.0.0" \
+  --notes "First Release" \
   apps/installer/dist/orqestra-install-*
 ```
 
