@@ -6,7 +6,7 @@ export const buildImagesStep: Step = {
   title: "Build Docker images (this is slow)",
   async run({ installDir }) {
     const r = await sh(
-      "docker compose --profile build-only build hosting-builder-image && docker compose build",
+      "docker compose build",
       { cwd: installDir, timeoutMs: 30 * 60 * 1000 },
     );
     if (!r.ok) {

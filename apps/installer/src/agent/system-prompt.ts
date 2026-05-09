@@ -10,7 +10,7 @@ Orqestra is a Docker Compose stack that runs:
 - **api** (Bun + Hono + tRPC + Better Auth, port 4000) — single source of truth for all client requests
 - **ws** (Bun native WebSocket server, port 4001) — fans out container build logs from Redis pubsub to browsers
 - **orchestrator-jupyter** (Go + Gin, port 8080) — creates Jupyter Docker containers per project, mounts a per-project named volume, labels for Traefik
-- **orchestrator-hosting** (Go + Gin, port 8081) — spawns short-lived "builder" containers that clone a GitHub repo, build, and sync output to Cloudflare R2
+- **orchestrator-hosting** (Go + Gin, port 8081) — spawns Ollama / Docker Model Runner containers per project for self-hosted LLM inference; serves a model catalog (DMR/Ollama/HF)
 - **traefik** (v3, ports 80/443) — reverse proxy with Let's Encrypt + Cloudflare DNS-01 (only in server mode, not local)
 - **web** (Next.js 15, port 3000) — the dashboard
 
@@ -18,8 +18,8 @@ Both Go orchestrators bind /var/run/docker.sock; nothing else does.
 
 ## Install modes
 
-- **local**: SITE_DOMAIN=localhost, NO traefik, ports exposed on 127.0.0.1, CF/R2 placeholders OK.
-- **server**: real domain, traefik live, valid CF API token (Zone.DNS Edit) and R2 keys required for full hosting feature; missing R2 still lets the app boot (hosting feature errors at runtime).
+- **local**: SITE_DOMAIN=localhost, NO traefik, ports exposed on 127.0.0.1, CF placeholders OK.
+- **server**: real domain, traefik live, valid CF API token (Zone.DNS Edit) required for ACME DNS-01.
 
 ## Common failure modes — check these first
 

@@ -43,7 +43,6 @@ Full walkthrough: **[docs/INSTALL.md](docs/INSTALL.md)**.
 | Reverse proxy | Traefik v3 + Let's Encrypt (DNS-01 via Cloudflare) |
 | Data | PostgreSQL 17 + Drizzle ORM, Redis 7 |
 | Catalog | Live `docker model search` + Hub API + Ollama scrape |
-| Edge | Cloudflare Worker (optional, for static-site hosting feature) |
 
 ---
 
@@ -92,7 +91,6 @@ apps/
   ws/                   Bun WebSocket fan-out
   orchestrator-jupyter/ Go + Gin (Jupyter container manager)
   orchestrator-hosting/ Go + Gin (LLM hosting + catalog)
-  edge-proxy/           Cloudflare Worker (subdomain → R2, optional)
   web/                  Next.js 15 dashboard
   installer/            Bun-compiled single-binary installer
 packages/
@@ -103,7 +101,6 @@ packages/
 docker/
   traefik/              Traefik config + acme.json
   jupyter-images/       Optional custom Jupyter images
-  hosting-builder/      Static-site builder (R2 hosting)
 scripts/
   install.sh            curl-bash bootstrap
 docs/                   Documentation

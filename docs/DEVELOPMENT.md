@@ -55,14 +55,6 @@ ORCHESTRATOR_HOSTING_URL=http://localhost:8081
 SITE_DOMAIN=localhost
 NEXT_PUBLIC_API_URL=http://localhost:4000
 NEXT_PUBLIC_WS_URL=ws://localhost:4001
-
-# R2 not required unless you'll exercise hosting builds
-R2_ACCOUNT_ID=dummy
-R2_ACCESS_KEY_ID=dummy
-R2_SECRET_ACCESS_KEY=dummy
-R2_BUCKET_NAME=dummy
-R2_PUBLIC_URL=http://dummy.local
-R2_ENDPOINT=http://dummy.local
 ```
 
 Generate secrets with:
@@ -135,7 +127,6 @@ If your browser is on a different machine (laptop), see [RUN_COMMANDS.md § SSH 
 The same code can run fully containerized using `docker-compose.yml`. Slower iteration but matches what the binary installer does:
 
 ```bash
-docker compose --profile build-only build hosting-builder-image
 docker compose up -d
 ```
 
@@ -160,7 +151,6 @@ apps/
   ws/                    # Bun WebSocket
   orchestrator-jupyter/  # Go + Gin (creates Jupyter containers)
   orchestrator-hosting/  # Go + Gin (creates Ollama containers + DMR)
-  edge-proxy/            # Cloudflare Worker (R2 SPA proxy)
   web/                   # Next.js 15
   installer/             # Bun-compiled installer binary
 
