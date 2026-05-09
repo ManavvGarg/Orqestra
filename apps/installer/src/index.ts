@@ -11,6 +11,17 @@ import type { InstallConfig, Step, StepContext } from "./types";
 async function main() {
   log.banner();
 
+  if (!process.stdin.isTTY) {
+    log.err("No interactive terminal detected on stdin.");
+    console.error(
+      kleur.gray(
+        "  The installer needs a TTY for prompts. If you piped from curl, run instead:\n" +
+          "    bash <(curl -fsSL https://orqestra.xyz/install.sh)",
+      ),
+    );
+    process.exit(1);
+  }
+
   const config = await collectConfig();
 
   // Filter steps by config (server-only / GPU-only / DNS-mode-specific drop out).
