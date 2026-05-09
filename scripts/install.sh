@@ -65,4 +65,15 @@ fi
 chmod +x "$BIN"
 echo "  Launching installer…"
 echo
-exec "$BIN" "$@"
+
+# When invoked via `curl … | bash`, stdin is the pipe, not a terminal.
+# Clack prompts need a TTY — without one, the first prompt sees EOF and
+# the installer exits silently. Reattach /dev/tty when available.
+if [ -r /dev/tty ]; then
+  exec "$BIN" "$@" < /dev/tty
+else
+  echo "Error: no controlling terminal available." >&2
+  echo "Run the installer in an interactive shell, e.g.:" >&2
+  echo "  bash <(curl -fsSL https://orqestra.xyz/install.sh)" >&2
+  exit 1
+fi
