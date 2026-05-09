@@ -57,7 +57,7 @@ export default function NewModelHostingPage() {
   const backendsQ = trpc.models.catalogBackends.useQuery();
   const searchQ = trpc.models.catalogSearch.useQuery(
     { q: debounced, provider },
-    { keepPreviousData: true },
+    { placeholderData: (prev) => prev },
   );
   const tagsQ = trpc.models.catalogTags.useQuery(
     { ref: pickedRef ?? "", provider },

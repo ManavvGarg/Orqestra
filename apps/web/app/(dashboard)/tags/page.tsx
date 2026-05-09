@@ -104,7 +104,7 @@ export default function TagsPage() {
 
   const tagCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    const projects = [...(projectsQuery.data?.jupyter ?? []), ...(projectsQuery.data?.hosting ?? [])];
+    const projects = [...(projectsQuery.data?.jupyter ?? []), ...(projectsQuery.data?.model ?? [])];
     for (const project of projects) {
       for (const tag of project.tags ?? []) {
         counts.set(tag.id, (counts.get(tag.id) ?? 0) + 1);
