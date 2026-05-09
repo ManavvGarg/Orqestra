@@ -123,7 +123,7 @@ pnpm-workspace.yaml
 
 ## Status
 
-v0.1 — single-server, single-org. Mature local-dev path; server install tested with Cloudflare DNS-01. SaaS multi-tenant is not yet supported (one user pool per install).
+v1.0.0 — single-server, single-org. Mature local-dev path; server install tested with Cloudflare DNS-01. SaaS multi-tenant is not yet supported (one user pool per install).
 
 ---
 
