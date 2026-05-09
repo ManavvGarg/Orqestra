@@ -127,6 +127,22 @@ v1.0.0 — single-server, single-org. Mature local-dev path; server install test
 
 ---
 
+## Roadmap / future features
+
+Tracking what's planned but not built. Order is rough priority, not a commitment.
+
+- [ ] **AgentDock** — host a personal team of agents that work for the user. Each agent is its own container with its own runtime (local Ollama / Docker Model Runner, OpenAI, or Anthropic Claude) and its own persona/tools, but they all share a **single contextual workspace** — files, conversation history, scratchpad, and tool outputs are visible to every agent in the dock. Hand a task to one agent, another picks up the thread without re-priming. Backed by a shared vector store + event log so context propagation is automatic.
+- [ ] **Static-site hosting** — clone repo, build, serve at `<slug>.<domain>` (was scaffolded in env, removed; will return when implemented end-to-end).
+- [ ] **SaaS multi-tenant** — orgs, per-org quotas, billing hooks.
+- [ ] **GPU scheduler** — fair-share across users + project priorities, instead of first-come.
+- [ ] **Backups** — postgres + named-volume snapshot/restore CLI.
+- [ ] **Audit log** — who started/stopped which container, exposed in dashboard.
+- [ ] **Per-project secrets vault** — bound to container env at create time, encrypted at rest.
+
+PRs and issue threads welcome — file under the relevant feature label.
+
+---
+
 ## License
 
 See [LICENSE](LICENSE).
