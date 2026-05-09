@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/logo.png" alt="Orqestra logo" width="240" />
+</p>
+
 # Orqestra
 
 Self-hosted container orchestration for **Jupyter notebooks** and **LLMs**, on one box or many.
