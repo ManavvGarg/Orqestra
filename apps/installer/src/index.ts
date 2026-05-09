@@ -11,12 +11,15 @@ import type { InstallConfig, Step, StepContext } from "./types";
 async function main() {
   log.banner();
 
-  if (!process.stdin.isTTY) {
+  const nonInteractive = !!process.env.ORQESTRA_INSTALL_MODE;
+  if (!nonInteractive && !process.stdin.isTTY) {
     log.err("No interactive terminal detected on stdin.");
     console.error(
       kleur.gray(
         "  The installer needs a TTY for prompts. If you piped from curl, run instead:\n" +
-          "    bash <(curl -fsSL https://orqestra.xyz/install.sh)",
+          "    bash <(curl -fsSL https://orqestra.xyz/install.sh)\n" +
+          "  Or use non-interactive mode:\n" +
+          "    curl -fsSL https://orqestra.xyz/install.sh | bash -s -- --non-interactive",
       ),
     );
     process.exit(1);
