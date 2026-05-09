@@ -118,22 +118,24 @@ if [ ! -f "$INSTALL_DIR/.orqestra-install.json" ]; then
   printf '{"completedSteps":[],"installDir":"%s","startedAt":"%s"}' "$INSTALL_DIR" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$INSTALL_DIR/.orqestra-install.json"
 fi
 
-# When invoked via `curl … | bash`, stdin is the pipe, not a terminal.
-# Clack prompts need a TTY — without one, the first prompt sees EOF and
-# the installer exits silently. Reattach /dev/tty when available.
-if [ -r /dev/tty ]; then
-  exec "$BIN" "$@" < /dev/tty
+# When invoked via `bash <(curl ...)`, stdin is already connected to the parent TTY.
+# Just run the binary directly without redirecting stdin.
+# If invoked via `curl ... | bash`, stdin is a pipe and we need /dev/tty.
+if [ -t 0 ]; then
+  # stdin is a terminal — run normally
+  exec "$BIN" "$@"
+elif [ -r /dev/tty ]; then
+  # stdin is a pipe but /dev/tty exists — reattach it
+  exec "$BIN" "$@" < /dev/tty > /dev/tty 2>&1
 else
-  # No TTY available: try non-interactive mode if environment is set up.
+  # No TTY at all
   if [ "$NON_INTERACTIVE" -eq 1 ]; then
-    # Feed defaults via stdin to answer prompts automatically.
-    # This is a workaround until the installer binary supports --non-interactive flag.
-    # For now, we'll try to run it anyway and hope the installer exits gracefully.
     exec "$BIN" "$@"
   else
     echo "Error: no controlling terminal available." >&2
-    echo "For non-interactive install, use:" >&2
-    echo "  curl -fsSL https://orqestra.xyz/install.sh | bash -s -- --non-interactive" >&2
+    echo "Try one of:" >&2
+    echo "  1. bash <(curl -fsSL https://orqestra.xyz/install.sh)" >&2
+    echo "  2. curl -fsSL https://orqestra.xyz/install.sh | bash -s -- --non-interactive" >&2
     exit 1
   fi
 fi
