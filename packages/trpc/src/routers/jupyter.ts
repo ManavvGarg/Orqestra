@@ -41,13 +41,22 @@ export const jupyterRouter = router({
           gpuIndex = cap.gpus[0].index;
           vramLimitMB = 2 * 1024;
         } else if (input.gpu.mode === "specific") {
-          const g = cap.gpus.find((x) => x.index === input.gpu.gpuIndex);
-          if (!g) {
-            throw new TRPCError({
-              code: "BAD_REQUEST",
-              message: `GPU ${input.gpu.gpuIndex} not found`,
-            });
-          }
+
+  const { gpuIndex: requestedGpuIndex } = input.gpu;
+
+  const g = cap.gpus.find((x) => x.index === requestedGpuIndex);
+
+  if (!g) {
+
+    throw new TRPCError({
+
+      code: "BAD_REQUEST",
+
+      message: `GPU ${requestedGpuIndex} not found`,
+
+    });
+
+  }
           gpuIndex = g.index;
           vramLimitMB = input.gpu.vramLimitMB ?? 2 * 1024;
         }

@@ -6,6 +6,6 @@ export {
   middleware,
   mergeRouters,
 } from "./trpc";
-export type { TrpcContext, OrchestratorClients, BuildQueue } from "./context";
+export type { TrpcContext, OrchestratorClients } from "./context";
 export { buildSlug, slugify } from "./util/slug";
 export { isValidGithubUrl } from "./util/github";
