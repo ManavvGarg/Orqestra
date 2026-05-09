@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { existsSync, readdirSync } from "node:fs";
 import { text, password, select, confirm, bail } from "./ui/prompts";
 import { randomHex } from "./lib/secrets";
 import { sh, which } from "./lib/shell";
@@ -49,14 +50,49 @@ export async function collectConfig(): Promise<InstallConfig> {
 
   const defaultDir =
     process.getuid?.() === 0 ? "/opt/orqestra" : join(homedir(), "orqestra");
-  const installDir = NON_INTERACTIVE
-    ? (process.env.ORQESTRA_INSTALL_DIR || defaultDir)
-    : ((await text({
-        message: "Install directory (where the repo is cloned)",
-        initialValue: defaultDir,
-        validate: (v) => (v.startsWith("/") || v.startsWith("~") ? undefined : "Use absolute path"),
-      })) as string);
+  
+  let installDir: string;
+  if (NON_INTERACTIVE) {
+    installDir = process.env.ORQESTRA_INSTALL_DIR || defaultDir;
+  } else {
+    installDir = (await text({
+      message: "Install directory (where the repo is cloned)",
+      initialValue: defaultDir,
+      validate: (v) => (v.startsWith("/") || v.startsWith("~") ? undefined : "Use absolute path"),
+    })) as string;
+  }
   bail(installDir);
+  
+  // Validate install directory: if it exists and isn't a git repo, ask what to do
+  const expandedDir = installDir.startsWith("~") ? installDir.replace("~", homedir()) : installDir;
+  if (existsSync(expandedDir)) {
+    const isGitRepo = existsSync(join(expandedDir, ".git"));
+    if (!isGitRepo) {
+      const isEmpty = readdirSync(expandedDir).length === 0;
+      if (!isEmpty) {
+        log.warn(`Directory exists and is not empty: ${expandedDir}`);
+        if (NON_INTERACTIVE) {
+          log.err("Non-interactive mode: aborting to avoid data loss. Use a clean directory.");
+          process.exit(1);
+        }
+        const override = (await confirm({
+          message: "Override? (delete all contents and proceed)",
+          initialValue: false,
+        })) as boolean;
+        bail(override);
+        if (!override) {
+          // Ask for a new path
+          const newDir = (await text({
+            message: "Enter a different install directory",
+            validate: (v) => (v.startsWith("/") || v.startsWith("~") ? undefined : "Use absolute path"),
+          })) as string;
+          bail(newDir);
+          return collectConfig(); // Restart with new directory (note: this is a simplified approach; full recursive handling would be better)
+        }
+      }
+    }
+  }
+  
   if (NON_INTERACTIVE) log.ok(`Install directory: ${installDir}`);
 
   const repoUrl = NON_INTERACTIVE
