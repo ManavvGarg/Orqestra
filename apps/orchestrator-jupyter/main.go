@@ -408,7 +408,7 @@ func (s *server) execCapture(ctx context.Context, containerID string, cmd []stri
 }
 
 func parseLsOutput(s string) []fileEntry {
-	var out []fileEntry
+	out := []fileEntry{} // non-nil so JSON serialises as [] not null
 	for _, line := range strings.Split(strings.TrimRight(s, "\n"), "\n") {
 		fields := strings.Fields(line)
 		if len(fields) < 7 {

@@ -78,13 +78,13 @@ export function FileExplorer({ projectId }: Props) {
         <div className="p-4 text-sm text-[var(--color-error)]">{error.message}</div>
       ) : isLoading ? (
         <div className="p-4 text-sm text-[var(--color-muted)]">Loading…</div>
-      ) : !data ? null : data.entries.length === 0 ? (
+      ) : !data ? null : (data.entries ?? []).length === 0 ? (
         <div className="p-8 text-center text-sm text-[var(--color-muted)]">
           (empty directory)
         </div>
       ) : (
         <ul className="divide-y divide-[var(--color-border)]">
-          {sortEntries(data.entries).map((e) => {
+          {sortEntries(data.entries ?? []).map((e) => {
             const childPath = path === "/" ? `/${e.name}` : `${path}/${e.name}`;
             const isDir = e.type === "dir";
             return (
