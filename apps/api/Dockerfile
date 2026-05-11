@@ -1,6 +1,8 @@
 FROM oven/bun:1.1-alpine AS base
 
-RUN apk add --no-cache nodejs npm
+# python3 is required by packages/models scrape scripts spawned at runtime
+# (refreshCatalog → Bun.spawn → scrape_hf_models.py / scrape_docker_models.py).
+RUN apk add --no-cache nodejs npm python3
 
 RUN npm install -g pnpm@9
 

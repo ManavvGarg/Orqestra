@@ -91,7 +91,7 @@ export function startCatalogWorker(): Worker {
   );
 
   worker.on("failed", (job, err) => {
-    log.error({ jobId: job?.id, err: err.message }, "catalog refresh failed");
+    log.error({ jobId: job?.id, error: err instanceof Error ? err.message : String(err) }, "catalog refresh failed");
   });
 
   return worker;
@@ -201,7 +201,7 @@ export function startModelCreateWorker(): Worker<ModelCreateJob> {
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : "create failed";
-        log.error({ projectId: j.projectId, err: message }, "model create failed");
+        log.error({ projectId: j.projectId, error: message }, "model create failed");
         await db
           .update(modelProjects)
           .set({ status: "errored", errorMessage: message, updatedAt: new Date() })
@@ -211,7 +211,7 @@ export function startModelCreateWorker(): Worker<ModelCreateJob> {
     { connection, concurrency: 2 },
   );
   worker.on("failed", (job, err) => {
-    log.error({ jobId: job?.id, err: err.message }, "model-create job failed");
+    log.error({ jobId: job?.id, error: err instanceof Error ? err.message : String(err) }, "model-create job failed");
   });
   return worker;
 }
@@ -256,7 +256,7 @@ export function startModelReadyWorker(): Worker<ModelReadyJob> {
           }
         } catch (err) {
           log.debug(
-            { projectId, err: err instanceof Error ? err.message : String(err) },
+            { projectId, error: err instanceof Error ? err.message : String(err) },
             "model-ready probe failed",
           );
         }
@@ -278,7 +278,7 @@ export function startModelReadyWorker(): Worker<ModelReadyJob> {
   );
 
   worker.on("failed", (job, err) => {
-    log.error({ jobId: job?.id, err: err.message }, "model-ready job failed");
+    log.error({ jobId: job?.id, error: err instanceof Error ? err.message : String(err) }, "model-ready job failed");
   });
 
   return worker;
