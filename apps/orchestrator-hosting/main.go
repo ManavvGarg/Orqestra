@@ -238,6 +238,9 @@ func (s *server) handleCapabilities(c *gin.Context) {
 		return
 	}
 	gpus := detectGPUs()
+	if gpus == nil {
+		gpus = []GPU{} // serialise as [] not null so JS clients can .reduce/.map directly
+	}
 	committedRam, committedCpu, vramByGpu := s.committedUsage(c.Request.Context())
 	for i, g := range gpus {
 		gpus[i].CommittedVramGB = vramByGpu[g.Index]

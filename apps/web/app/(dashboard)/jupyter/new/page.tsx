@@ -70,7 +70,7 @@ export default function NewJupyterPage() {
   const freeRamGB = cap ? cap.freeRamGB - cap.committedRamGB : 0;
   const freeCpu = cap ? Math.max(0, cap.cpuCores - cap.committedCpu) : 0;
   const freeVramGB = cap
-    ? cap.gpus.reduce((s, g) => s + Math.max(0, g.vramFreeGB - g.committedVramGB), 0)
+    ? (cap.gpus ?? []).reduce((s, g) => s + Math.max(0, g.vramFreeGB - g.committedVramGB), 0)
     : 0;
 
   return (

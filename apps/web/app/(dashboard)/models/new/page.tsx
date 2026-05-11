@@ -123,7 +123,7 @@ export default function NewModelHostingPage() {
     return <div className="text-sm text-[var(--color-muted)]">Loading host capabilities…</div>;
   }
   const freeRamGB = cap.freeRamGB - cap.committedRamGB;
-  const freeVramGB = cap.gpus.reduce(
+  const freeVramGB = (cap.gpus ?? []).reduce(
     (s, g) => s + Math.max(0, g.vramFreeGB - g.committedVramGB),
     0,
   );
