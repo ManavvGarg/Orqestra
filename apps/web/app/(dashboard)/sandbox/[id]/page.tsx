@@ -129,7 +129,7 @@ export default function SandboxDetailPage({ params }: { params: Promise<{ id: st
 
   const sshCmd =
     p.sshHost && p.containerPort
-      ? `ssh -p ${p.containerPort} -i <private-key-file> ${p.sshUser ?? "root"}@${p.sshHost}`
+      ? `chmod 600 <private-key-file> && ssh -o StrictHostKeyChecking=accept-new -p ${p.containerPort} -i <private-key-file> ${p.sshUser ?? "root"}@${p.sshHost}`
       : null;
 
   async function copySsh() {

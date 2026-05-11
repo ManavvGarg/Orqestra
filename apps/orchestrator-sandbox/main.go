@@ -482,7 +482,7 @@ func (s *server) handleCreate(c *gin.Context) {
 	if host == "" {
 		host = "localhost"
 	}
-	sshCmd := fmt.Sprintf("ssh -p %d -i <private-key-file> root@%s", hostPort, host)
+	sshCmd := fmt.Sprintf("chmod 600 <private-key-file> && ssh -o StrictHostKeyChecking=accept-new -p %d -i <private-key-file> root@%s", hostPort, host)
 
 	c.JSON(http.StatusOK, createResp{
 		ContainerID:   resp.ID,
@@ -532,7 +532,7 @@ func (s *server) handleStart(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, startResp{
 		ContainerPort: hostPort,
-		SSHCommand:    fmt.Sprintf("ssh -p %d -i <private-key-file> root@%s", hostPort, host),
+		SSHCommand:    fmt.Sprintf("chmod 600 <private-key-file> && ssh -o StrictHostKeyChecking=accept-new -p %d -i <private-key-file> root@%s", hostPort, host),
 	})
 }
 

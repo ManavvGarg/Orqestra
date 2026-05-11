@@ -101,6 +101,12 @@ export default function NewSandboxPage() {
     : 0;
 
   if (created) {
+    const pemFilename = `orqestra-sandbox-${created.slug}.pem`;
+    const pemPath = `~/Downloads/${pemFilename}`;
+    const readyCmd = created.sshCommand
+      .replaceAll("<private-key-file>", pemPath);
+    const copyReady = () => navigator.clipboard.writeText(readyCmd);
+
     return (
       <div className="max-w-xl">
         <h1 className="mb-2 text-2xl font-semibold">Sandbox created</h1>
@@ -122,13 +128,16 @@ export default function NewSandboxPage() {
 
         <div className="mb-4 rounded-md border border-[var(--color-border)] p-4 text-sm">
           <div className="mb-2 flex items-center gap-2 font-medium">
-            <Terminal className="h-4 w-4" /> Connect
+            <Terminal className="h-4 w-4" /> Connect (paste, includes chmod)
           </div>
           <code className="block break-all rounded bg-white/5 px-2 py-1 font-mono text-xs">
-            {created.sshCommand}
+            {readyCmd}
           </code>
+          <Button size="sm" variant="ghost" className="mt-2" onClick={copyReady}>
+            Copy command
+          </Button>
           <p className="mt-2 text-xs text-[var(--color-muted)]">
-            Save the .pem, then <code>chmod 600 &lt;file&gt;.pem</code> before connecting.
+            Assumes browser saved <code>{pemFilename}</code> to <code>~/Downloads</code>. Adjust path if you moved it.
           </p>
         </div>
 
