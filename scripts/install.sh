@@ -18,6 +18,8 @@
 #   --gpu auto|off              GPU support
 #   --sudo auto|guide           Privileged-command behavior
 #   --skip-build                Stop after .env + network; don't build/boot
+#   --reset                     docker compose down -v + drop .env before re-running
+#                               (use when postgres volume has a stale password)
 #   --non-interactive           Refuse to prompt; use defaults + env vars
 #
 # Environment overrides (same as flags):
@@ -45,6 +47,7 @@ PUBLIC_IP="${ORQESTRA_SERVER_PUBLIC_IP:-}"
 GPU_MODE="${ORQESTRA_GPU_MODE:-}"
 SUDO_MODE="${ORQESTRA_SUDO_MODE:-}"
 SKIP_BUILD="${ORQESTRA_SKIP_BUILD:-0}"
+RESET="${ORQESTRA_RESET:-0}"
 NON_INTERACTIVE=0
 
 while [ $# -gt 0 ]; do
@@ -60,6 +63,7 @@ while [ $# -gt 0 ]; do
     --gpu)             GPU_MODE="$2"; shift 2 ;;
     --sudo)            SUDO_MODE="$2"; shift 2 ;;
     --skip-build)      SKIP_BUILD=1; shift ;;
+    --reset)           RESET=1; shift ;;
     --non-interactive) NON_INTERACTIVE=1; shift ;;
     -h|--help)         sed -n '2,30p' "$0"; exit 0 ;;
     *) echo "Unknown flag: $1" >&2; exit 2 ;;
@@ -389,6 +393,17 @@ step_firewall() {
   fi
 }
 
+step_reset() {
+  [ "$RESET" -eq 1 ] || return 0
+  step "Reset existing stack (--reset)"
+  if [ -f "$DIR/docker-compose.yml" ]; then
+    ( cd "$DIR" && sudo_run docker compose down -v --remove-orphans 2>/dev/null || true )
+    ok "compose down -v"
+  fi
+  # Drop the .env so secrets regenerate cleanly.
+  [ -f "$DIR/.env" ] && rm -f "$DIR/.env" && ok ".env removed"
+}
+
 step_clone_repo() {
   step "Fetch Orqestra source"
   mkdir -p "$(dirname "$DIR")"
@@ -406,14 +421,30 @@ step_clone_repo() {
   fi
 }
 
+env_get() {
+  # Read VALUE for KEY from existing .env (preserves across re-runs).
+  local key="$1" file="$DIR/.env"
+  [ -f "$file" ] || return 0
+  grep -E "^${key}=" "$file" | head -n1 | cut -d= -f2-
+}
+
 write_env_file() {
   local target="$DIR/.env"
   local is_local="true"
   [ "$MODE" = "server" ] && is_local="false"
 
-  local pg="${ORQESTRA_POSTGRES_PASSWORD:-$(rand_hex 16)}"
-  local ba="${ORQESTRA_BETTER_AUTH_SECRET:-$(rand_hex 32)}"
-  local ia="${ORQESTRA_INTERNAL_API_SECRET:-$(rand_hex 32)}"
+  # Precedence: explicit env override > existing .env > freshly-generated.
+  # Reusing existing secrets is critical because the postgres data volume
+  # initialises POSTGRES_PASSWORD only on first boot; regenerating after that
+  # produces 28P01 auth failures.
+  local pg_existing ba_existing ia_existing
+  pg_existing="$(env_get POSTGRES_PASSWORD)"
+  ba_existing="$(env_get BETTER_AUTH_SECRET)"
+  ia_existing="$(env_get INTERNAL_API_SECRET)"
+
+  local pg="${ORQESTRA_POSTGRES_PASSWORD:-${pg_existing:-$(rand_hex 16)}}"
+  local ba="${ORQESTRA_BETTER_AUTH_SECRET:-${ba_existing:-$(rand_hex 32)}}"
+  local ia="${ORQESTRA_INTERNAL_API_SECRET:-${ia_existing:-$(rand_hex 32)}}"
 
   local db_url="postgresql://orqestra:${pg}@postgres:5432/orqestra"
   local redis_url="redis://redis:6379"
@@ -715,6 +746,7 @@ main() {
   step_install_nvidia
   step_firewall
   step_clone_repo
+  step_reset
   step_write_env
   step_dns
   step_network

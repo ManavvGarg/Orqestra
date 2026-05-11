@@ -69,6 +69,8 @@ services:
       ORCHESTRATOR_JUPYTER_URL: ${ORCHESTRATOR_JUPYTER_URL}
       ORCHESTRATOR_HOSTING_URL: ${ORCHESTRATOR_HOSTING_URL}
       SITE_DOMAIN: ${SITE_DOMAIN}
+    ports:
+      - "4000:4000"
     networks: [proxy]
     depends_on:
       postgres: { condition: service_healthy }
@@ -92,6 +94,8 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       SITE_DOMAIN: ${SITE_DOMAIN}
+    ports:
+      - "4001:4001"
     networks: [proxy]
     depends_on:
       redis: { condition: service_healthy }
@@ -141,8 +145,12 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
       NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL}
+    ports:
+      - "3000:3000"
     networks: [proxy]
     depends_on:
       - api
