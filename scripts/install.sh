@@ -29,18 +29,9 @@
 
 set -Eeuo pipefail
 
-# ----- TTY plumbing -----------------------------------------------------------
-# When piped via `curl ... | bash`, stdin is the pipe. Reattach /dev/tty for
-# interactive prompts so `read` works against the terminal directly. Suppress
-# errors when /dev/tty isn't available (CI, sandboxes) — non-interactive paths
-# will simply use defaults.
-if [ ! -t 0 ]; then
-  # Probe /dev/tty in a subshell so the parent shell never prints a redirect
-  # error if it's unavailable (CI / sandboxes).
-  if ( : < /dev/tty ) 2>/dev/null; then
-    exec < /dev/tty
-  fi
-fi
+# NOTE: do NOT touch stdin at top level. When invoked as `curl ... | bash`, the
+# script body itself streams in over stdin; reattaching /dev/tty here truncates
+# the script. TTY reattach happens inside main() after the pipe has drained.
 
 # ----- Defaults / flags -------------------------------------------------------
 MODE="${ORQESTRA_INSTALL_MODE:-}"
@@ -702,6 +693,16 @@ collect_config() {
 
 # ----- Main -------------------------------------------------------------------
 main() {
+  # Safe to reattach /dev/tty now — bash has read the whole script body before
+  # invoking main. When piped via `curl | bash`, stdin was the pipe; replace it
+  # with the controlling terminal so interactive prompts work. Skip cleanly
+  # when /dev/tty is unavailable (CI / sandboxes).
+  if [ ! -t 0 ]; then
+    if ( : < /dev/tty ) 2>/dev/null; then
+      exec < /dev/tty
+    fi
+  fi
+
   detect_os
   collect_config
 
