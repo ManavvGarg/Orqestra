@@ -10,6 +10,8 @@ import {
   modelProjectTags,
   modelProjects,
   projectTags,
+  sandboxProjectTags,
+  sandboxProjects,
 } from "@orqestra/db";
 import { protectedProcedure, router } from "../trpc";
 
@@ -19,7 +21,8 @@ const tagColorSchema = z
   .trim()
   .regex(/^#[0-9A-Fa-f]{6}$/)
   .default("#6366f1");
-const projectKindSchema = z.enum(["jupyter", "model"]);
+const projectKindSchema = z.enum(["jupyter", "model", "sandbox"]);
+type ProjectKind = z.infer<typeof projectKindSchema>;
 
 async function getOwnedTag(userId: string, tagId: string) {
   const [tag] = await db
@@ -30,19 +33,27 @@ async function getOwnedTag(userId: string, tagId: string) {
   return tag;
 }
 
-async function ensureOwnedProject(userId: string, kind: "jupyter" | "model", projectId: string) {
-  const [project] =
-    kind === "jupyter"
-      ? await db
-          .select({ id: jupyterProjects.id })
-          .from(jupyterProjects)
-          .where(and(eq(jupyterProjects.id, projectId), eq(jupyterProjects.userId, userId)))
-          .limit(1)
-      : await db
-          .select({ id: modelProjects.id })
-          .from(modelProjects)
-          .where(and(eq(modelProjects.id, projectId), eq(modelProjects.userId, userId)))
-          .limit(1);
+async function ensureOwnedProject(userId: string, kind: ProjectKind, projectId: string) {
+  let project: { id: string } | undefined;
+  if (kind === "jupyter") {
+    [project] = await db
+      .select({ id: jupyterProjects.id })
+      .from(jupyterProjects)
+      .where(and(eq(jupyterProjects.id, projectId), eq(jupyterProjects.userId, userId)))
+      .limit(1);
+  } else if (kind === "sandbox") {
+    [project] = await db
+      .select({ id: sandboxProjects.id })
+      .from(sandboxProjects)
+      .where(and(eq(sandboxProjects.id, projectId), eq(sandboxProjects.userId, userId)))
+      .limit(1);
+  } else {
+    [project] = await db
+      .select({ id: modelProjects.id })
+      .from(modelProjects)
+      .where(and(eq(modelProjects.id, projectId), eq(modelProjects.userId, userId)))
+      .limit(1);
+  }
   if (!project) throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
 }
 
@@ -134,6 +145,11 @@ export const tagsRouter = router({
           .insert(jupyterProjectTags)
           .values({ projectId: input.projectId, tagId: input.tagId })
           .onConflictDoNothing();
+      } else if (input.projectKind === "sandbox") {
+        await db
+          .insert(sandboxProjectTags)
+          .values({ projectId: input.projectId, tagId: input.tagId })
+          .onConflictDoNothing();
       } else {
         await db
           .insert(modelProjectTags)
@@ -163,6 +179,15 @@ export const tagsRouter = router({
             and(
               eq(jupyterProjectTags.projectId, input.projectId),
               eq(jupyterProjectTags.tagId, input.tagId),
+            ),
+          );
+      } else if (input.projectKind === "sandbox") {
+        await db
+          .delete(sandboxProjectTags)
+          .where(
+            and(
+              eq(sandboxProjectTags.projectId, input.projectId),
+              eq(sandboxProjectTags.tagId, input.tagId),
             ),
           );
       } else {

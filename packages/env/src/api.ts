@@ -15,6 +15,7 @@ export const env = createEnv({
     INTERNAL_API_SECRET: z.string().min(32),
     ORCHESTRATOR_JUPYTER_URL: z.string().url(),
     ORCHESTRATOR_HOSTING_URL: z.string().url(),
+    ORCHESTRATOR_SANDBOX_URL: z.string().url(),
     SITE_DOMAIN: z.string().min(1),
   },
   runtimeEnv: process.env,

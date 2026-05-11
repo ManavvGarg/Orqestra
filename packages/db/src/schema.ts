@@ -35,6 +35,21 @@ export const modelRuntime = pgEnum("model_runtime", [
   "llama-cpp",
 ]);
 
+export const sandboxDistro = pgEnum("sandbox_distro", [
+  "ubuntu-22.04",
+  "ubuntu-24.04",
+  "debian-12",
+  "alpine-3.20",
+]);
+
+export const sandboxStatus = pgEnum("sandbox_status", [
+  "creating",
+  "running",
+  "stopped",
+  "destroyed",
+  "errored",
+]);
+
 export const modelProjectStatus = pgEnum("model_project_status", [
   "pending",
   "pulling",
@@ -166,6 +181,31 @@ export const modelProjects = pgTable("model_projects", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const sandboxProjects = pgTable("sandbox_projects", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  distro: sandboxDistro("distro").notNull(),
+  description: text("description"),
+  containerId: text("container_id"),
+  containerPort: integer("container_port"),
+  sshHost: text("ssh_host"),
+  sshUser: text("ssh_user"),
+  /** Public key baked into container `authorized_keys`. Persisted so we can
+   *  show fingerprint in the UI. Private key is NOT persisted — returned once
+   *  in the create response and downloaded by the user. */
+  publicKey: text("public_key"),
+  status: sandboxStatus("status").notNull().default("creating"),
+  volumeName: text("volume_name").notNull(),
+  cpuLimit: text("cpu_limit"),
+  memoryLimit: text("memory_limit"),
+  gpuIndex: integer("gpu_index"),
+  vramLimitMB: integer("vram_limit_mb"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const projectTags = pgTable(
   "project_tags",
   {
@@ -193,6 +233,18 @@ export const jupyterProjectTags = pgTable(
   }),
 );
 
+export const sandboxProjectTags = pgTable(
+  "sandbox_project_tags",
+  {
+    projectId: uuid("project_id").notNull().references(() => sandboxProjects.id, { onDelete: "cascade" }),
+    tagId: uuid("tag_id").notNull().references(() => projectTags.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.projectId, table.tagId] }),
+  }),
+);
+
 export const modelProjectTags = pgTable(
   "model_project_tags",
   {
@@ -209,7 +261,21 @@ export const usersRelations = relations(users, ({ many }) => ({
   sessions: many(sessions),
   jupyterProjects: many(jupyterProjects),
   modelProjects: many(modelProjects),
+  sandboxProjects: many(sandboxProjects),
   projectTags: many(projectTags),
+}));
+
+export const sandboxProjectsRelations = relations(sandboxProjects, ({ one, many }) => ({
+  user: one(users, { fields: [sandboxProjects.userId], references: [users.id] }),
+  tags: many(sandboxProjectTags),
+}));
+
+export const sandboxProjectTagsRelations = relations(sandboxProjectTags, ({ one }) => ({
+  project: one(sandboxProjects, {
+    fields: [sandboxProjectTags.projectId],
+    references: [sandboxProjects.id],
+  }),
+  tag: one(projectTags, { fields: [sandboxProjectTags.tagId], references: [projectTags.id] }),
 }));
 
 export const jupyterProjectsRelations = relations(jupyterProjects, ({ one, many }) => ({
@@ -227,6 +293,7 @@ export const projectTagsRelations = relations(projectTags, ({ one, many }) => ({
   user: one(users, { fields: [projectTags.userId], references: [users.id] }),
   jupyterProjects: many(jupyterProjectTags),
   modelProjects: many(modelProjectTags),
+  sandboxProjects: many(sandboxProjectTags),
 }));
 
 export const jupyterProjectTagsRelations = relations(jupyterProjectTags, ({ one }) => ({
@@ -255,3 +322,5 @@ export type ModelProject = typeof modelProjects.$inferSelect;
 export type NewModelProject = typeof modelProjects.$inferInsert;
 export type ProjectTag = typeof projectTags.$inferSelect;
 export type NewProjectTag = typeof projectTags.$inferInsert;
+export type SandboxProject = typeof sandboxProjects.$inferSelect;
+export type NewSandboxProject = typeof sandboxProjects.$inferInsert;

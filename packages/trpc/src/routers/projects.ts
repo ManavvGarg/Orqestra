@@ -13,6 +13,8 @@ import {
   modelProjects,
   models,
   projectTags,
+  sandboxProjectTags,
+  sandboxProjects,
 } from "@orqestra/db";
 import { router, protectedProcedure } from "../trpc";
 
@@ -61,9 +63,25 @@ async function listModelTags(projectIds: string[], userId: string) {
   return collectTags(rows);
 }
 
+async function listSandboxTags(projectIds: string[], userId: string) {
+  if (projectIds.length === 0) return new Map<string, ProjectTagDto[]>();
+  const rows = await db
+    .select({
+      projectId: sandboxProjectTags.projectId,
+      id: projectTags.id,
+      name: projectTags.name,
+      color: projectTags.color,
+    })
+    .from(sandboxProjectTags)
+    .innerJoin(projectTags, eq(sandboxProjectTags.tagId, projectTags.id))
+    .where(and(inArray(sandboxProjectTags.projectId, projectIds), eq(projectTags.userId, userId)))
+    .orderBy(asc(projectTags.name));
+  return collectTags(rows);
+}
+
 export const projectsRouter = router({
   list: protectedProcedure.query(async ({ ctx }) => {
-    const [jupyter, modelRows] = await Promise.all([
+    const [jupyter, modelRows, sandboxRows] = await Promise.all([
       db
         .select()
         .from(jupyterProjects)
@@ -74,10 +92,16 @@ export const projectsRouter = router({
         .from(modelProjects)
         .where(eq(modelProjects.userId, ctx.user.id))
         .orderBy(desc(modelProjects.createdAt)),
+      db
+        .select()
+        .from(sandboxProjects)
+        .where(eq(sandboxProjects.userId, ctx.user.id))
+        .orderBy(desc(sandboxProjects.createdAt)),
     ]);
-    const [jupyterTags, modelTags] = await Promise.all([
+    const [jupyterTags, modelTags, sandboxTags] = await Promise.all([
       listJupyterTags(jupyter.map((p) => p.id), ctx.user.id),
       listModelTags(modelRows.map((p) => p.id), ctx.user.id),
+      listSandboxTags(sandboxRows.map((p) => p.id), ctx.user.id),
     ]);
     return {
       jupyter: jupyter.map((p) => ({
@@ -90,11 +114,16 @@ export const projectsRouter = router({
         kind: "model" as const,
         tags: modelTags.get(p.id) ?? [],
       })),
+      sandbox: sandboxRows.map((p) => ({
+        ...p,
+        kind: "sandbox" as const,
+        tags: sandboxTags.get(p.id) ?? [],
+      })),
     };
   }),
 
   getById: protectedProcedure
-    .input(z.object({ id: z.string().uuid(), kind: z.enum(["jupyter", "model"]) }))
+    .input(z.object({ id: z.string().uuid(), kind: z.enum(["jupyter", "model", "sandbox"]) }))
     .query(async ({ ctx, input }) => {
       if (input.kind === "jupyter") {
         const [row] = await db
@@ -105,6 +134,16 @@ export const projectsRouter = router({
         if (!row) throw new TRPCError({ code: "NOT_FOUND" });
         const tags = await listJupyterTags([row.id], ctx.user.id);
         return { ...row, kind: "jupyter" as const, tags: tags.get(row.id) ?? [] };
+      }
+      if (input.kind === "sandbox") {
+        const [row] = await db
+          .select()
+          .from(sandboxProjects)
+          .where(and(eq(sandboxProjects.id, input.id), eq(sandboxProjects.userId, ctx.user.id)))
+          .limit(1);
+        if (!row) throw new TRPCError({ code: "NOT_FOUND" });
+        const tags = await listSandboxTags([row.id], ctx.user.id);
+        return { ...row, kind: "sandbox" as const, tags: tags.get(row.id) ?? [] };
       }
       const [row] = await db
         .select()

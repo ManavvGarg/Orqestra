@@ -115,6 +115,40 @@ export interface OrchestratorClients {
       runtime: "ollama" | "docker-model-runner" | "llama-cpp";
     }): Promise<{ ready: boolean; error?: string }>;
   };
+  sandbox: {
+    create(input: {
+      projectId: string;
+      slug: string;
+      userId: string;
+      distro: "ubuntu-22.04" | "ubuntu-24.04" | "debian-12" | "alpine-3.20";
+      volumeName: string;
+      cpuLimit?: string;
+      memoryLimit?: string;
+      gpuIndex?: number | null;
+      vramLimitMB?: number | null;
+    }): Promise<{
+      containerId: string;
+      containerPort: number;
+      sshHost: string;
+      sshUser: string;
+      publicKey: string;
+      privateKey: string;
+      sshCommand: string;
+    }>;
+    start(input: { containerId: string }): Promise<{
+      containerPort?: number;
+      sshCommand?: string;
+    }>;
+    stop(input: { containerId: string }): Promise<{ ok: true }>;
+    destroy(input: { containerId: string; volumeName: string }): Promise<{ ok: true }>;
+    stats(input: { containerId: string }): Promise<{
+      cpuPercent: number;
+      memoryUsageBytes: number;
+      memoryLimitBytes: number;
+      memoryPercent: number;
+      readAt: string;
+    }>;
+  };
 }
 
 export interface JobQueue {

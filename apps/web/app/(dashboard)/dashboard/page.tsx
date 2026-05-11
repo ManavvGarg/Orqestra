@@ -6,7 +6,7 @@ import { trpc } from "@/lib/trpc";
 import { ProjectCard } from "@/components/project-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Boxes, CheckSquare, FileCode2, Square, Tag, Trash2 } from "lucide-react";
+import { Boxes, CheckSquare, FileCode2, Square, Tag, Terminal, Trash2 } from "lucide-react";
 
 type ProjectTag = {
   id: string;
@@ -15,7 +15,7 @@ type ProjectTag = {
 };
 
 type ProjectRow = {
-  kind: "jupyter" | "model";
+  kind: "jupyter" | "model" | "sandbox";
   id: string;
   name: string;
   slug: string;
@@ -31,7 +31,7 @@ type ProjectRow = {
     | "pulling";
 };
 
-type CategoryId = "all" | "jupyter" | "model" | "active" | "attention" | "destroyed";
+type CategoryId = "all" | "jupyter" | "model" | "sandbox" | "active" | "attention" | "destroyed";
 type TagFilter = string | "untagged" | null;
 
 function createdTime(project: ProjectRow) {
@@ -47,6 +47,8 @@ function matchesCategory(project: ProjectRow, category: CategoryId) {
       return project.kind === "jupyter";
     case "model":
       return project.kind === "model";
+    case "sandbox":
+      return project.kind === "sandbox";
     case "active":
       return project.status === "running" || project.status === "pulling";
     case "attention":
@@ -74,6 +76,7 @@ export default function DashboardPage() {
   const unassignTag = trpc.tags.unassign.useMutation({ onSuccess: refreshProjects });
   const destroyJupyter = trpc.jupyter.destroy.useMutation();
   const destroyModel = trpc.models.destroy.useMutation();
+  const destroySandbox = trpc.sandbox.destroy.useMutation();
 
   const projectKey = (p: { kind: string; id: string }) => `${p.kind}:${p.id}`;
   const toggleSelected = (key: string) =>
@@ -103,6 +106,8 @@ export default function DashboardPage() {
           await destroyJupyter.mutateAsync({ projectId: id! });
         } else if (kind === "model") {
           await destroyModel.mutateAsync({ projectId: id! });
+        } else if (kind === "sandbox") {
+          await destroySandbox.mutateAsync({ projectId: id! });
         }
       } catch (e) {
         failures.push(`${kind}:${id} → ${e instanceof Error ? e.message : "failed"}`);
@@ -121,9 +126,9 @@ export default function DashboardPage() {
     return <div className="text-sm text-[var(--color-muted)]">Loading…</div>;
   }
 
-  const all = ([...(data?.jupyter ?? []), ...(data?.model ?? [])] as ProjectRow[]).sort(
-    (a, b) => createdTime(b) - createdTime(a),
-  );
+  const all = (
+    [...(data?.jupyter ?? []), ...(data?.model ?? []), ...(data?.sandbox ?? [])] as ProjectRow[]
+  ).sort((a, b) => createdTime(b) - createdTime(a));
   const categoryProjects = all.filter((project) => matchesCategory(project, category));
   const visibleProjects =
     tagFilter === "untagged"
@@ -150,6 +155,12 @@ export default function DashboardPage() {
       label: "Models",
       count: all.filter((p) => matchesCategory(p, "model")).length,
       icon: <Boxes className="h-3.5 w-3.5" />,
+    },
+    {
+      id: "sandbox",
+      label: "Sandbox",
+      count: all.filter((p) => matchesCategory(p, "sandbox")).length,
+      icon: <Terminal className="h-3.5 w-3.5" />,
     },
     {
       id: "active",
@@ -246,6 +257,9 @@ export default function DashboardPage() {
               </Button>
               <Button asChild variant="outline" size="sm">
                 <Link href={"/jupyter/new" as any}>+ Jupyter</Link>
+              </Button>
+              <Button asChild variant="outline" size="sm">
+                <Link href={"/sandbox/new" as any}>+ Sandbox</Link>
               </Button>
               <Button asChild size="sm">
                 <Link href={"/models/new" as any}>+ Model</Link>

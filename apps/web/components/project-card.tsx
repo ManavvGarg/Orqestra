@@ -36,7 +36,18 @@ interface ModelRow {
   tags?: ProjectTag[];
 }
 
-type Project = JupyterRow | ModelRow;
+interface SandboxRow {
+  kind: "sandbox";
+  id: string;
+  name: string;
+  slug: string;
+  distro: string;
+  status: "running" | "stopped" | "creating" | "destroyed" | "errored";
+  createdAt: Date | string;
+  tags?: ProjectTag[];
+}
+
+type Project = JupyterRow | ModelRow | SandboxRow;
 
 export function ProjectCard({
   project,
@@ -57,9 +68,18 @@ export function ProjectCard({
   selected?: boolean;
   onToggleSelect?: () => void;
 }) {
-  const detailHref = project.kind === "jupyter" ? `/jupyter/${project.id}` : `/models/${project.id}`;
+  const detailHref =
+    project.kind === "jupyter"
+      ? `/jupyter/${project.id}`
+      : project.kind === "sandbox"
+        ? `/sandbox/${project.id}`
+        : `/models/${project.id}`;
   const externalUrl =
-    project.kind === "jupyter" ? project.containerUrl : project.apiUrl;
+    project.kind === "jupyter"
+      ? project.containerUrl
+      : project.kind === "model"
+        ? project.apiUrl
+        : null;
   const status = project.status;
   const created =
     typeof project.createdAt === "string"
@@ -99,7 +119,11 @@ export function ProjectCard({
             {project.name}
           </Link>
           <div className="mt-0.5 text-xs text-[var(--color-muted)]">
-            {project.kind === "jupyter" ? `Jupyter · ${project.jobType}` : "Static hosting"}
+            {project.kind === "jupyter"
+              ? `Jupyter · ${project.jobType}`
+              : project.kind === "sandbox"
+                ? `Sandbox · ${project.distro}`
+                : "Static hosting"}
           </div>
         </div>
         <StatusBadge status={status} />

@@ -5,6 +5,7 @@ import { jupyterRouter } from "./routers/jupyter";
 import { modelsRouter } from "./routers/models";
 import { filesRouter } from "./routers/files";
 import { tagsRouter } from "./routers/tags";
+import { sandboxRouter } from "./routers/sandbox";
 
 export const appRouter = router({
   auth: authRouter,
@@ -13,6 +14,7 @@ export const appRouter = router({
   models: modelsRouter,
   files: filesRouter,
   tags: tagsRouter,
+  sandbox: sandboxRouter,
 });
 
 export type AppRouter = typeof appRouter;

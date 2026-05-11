@@ -485,6 +485,7 @@ write_env_file() {
     echo
     echo "ORCHESTRATOR_JUPYTER_URL=http://orchestrator-jupyter:8080"
     echo "ORCHESTRATOR_HOSTING_URL=http://orchestrator-hosting:8081"
+    echo "ORCHESTRATOR_SANDBOX_URL=http://orchestrator-sandbox:8082"
     echo
     echo "SITE_DOMAIN=${DOMAIN:-localhost}"
     echo "CF_DNS_API_TOKEN=${CF_TOKEN}"

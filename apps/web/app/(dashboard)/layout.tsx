@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useSession, signOut } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
-import { Boxes, FileCode2, LayoutDashboard, LogOut, Tag } from "lucide-react";
+import { Boxes, FileCode2, LayoutDashboard, LogOut, Tag, Terminal } from "lucide-react";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { data: session, isPending } = useSession();
@@ -34,6 +34,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </NavLink>
           <NavLink href="/models/new" icon={<Boxes className="h-4 w-4" />}>
             Host model
+          </NavLink>
+          <NavLink href="/sandbox/new" icon={<Terminal className="h-4 w-4" />}>
+            New Sandbox
           </NavLink>
           <NavLink href="/tags" icon={<Tag className="h-4 w-4" />}>
             Tags

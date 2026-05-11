@@ -1,0 +1,10 @@
+{
+  "name": "@orqestra/orchestrator-sandbox",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "go run .",
+    "build": "go build -o orchestrator .",
+    "typecheck": "go vet ./..."
+  }
+}

@@ -68,4 +68,11 @@ export const orchestrators: OrchestratorClients = {
     modelReady: (input) =>
       call(`${env.ORCHESTRATOR_HOSTING_URL}/internal/hosting/model-ready`, input),
   },
+  sandbox: {
+    create: (input) => call(`${env.ORCHESTRATOR_SANDBOX_URL}/internal/sandbox/create`, input),
+    start: (input) => call(`${env.ORCHESTRATOR_SANDBOX_URL}/internal/sandbox/start`, input),
+    stop: (input) => call(`${env.ORCHESTRATOR_SANDBOX_URL}/internal/sandbox/stop`, input),
+    destroy: (input) => call(`${env.ORCHESTRATOR_SANDBOX_URL}/internal/sandbox/destroy`, input),
+    stats: (input) => call(`${env.ORCHESTRATOR_SANDBOX_URL}/internal/sandbox/stats`, input),
+  },
 };
