@@ -1,10 +1,9 @@
 # Self-host from source
 
-For users who want to **clone the repo and run it themselves** instead of using the binary installer. This is the right path if you:
+For users who want to **clone the repo and run it themselves** instead of using `install.sh`. This is the right path if you:
 
 - Want to modify the code (UI, schema, orchestrator behavior).
 - Want to vendor your own Docker images / catalogs.
-- Don't trust pre-built binaries.
 - Are contributing back upstream.
 
 If you just want to install + run Orqestra, use [INSTALL.md](INSTALL.md) instead.
@@ -15,7 +14,7 @@ If you just want to install + run Orqestra, use [INSTALL.md](INSTALL.md) instead
 |------|---------|-----|
 | Node.js | 20+ | pnpm + Drizzle Kit + Next.js |
 | pnpm | 9+ | Monorepo package manager |
-| Bun | 1.1+ | Runs the API + WS apps + compiles installer |
+| Bun | 1.1+ | Runs the API + WS apps |
 | Go | 1.25+ | Both orchestrators |
 | Docker + compose | 24+ | Runs Postgres + Redis + everything else |
 | Git, openssl | any | Clone + secret generation |
@@ -124,7 +123,7 @@ If your browser is on a different machine (laptop), see [RUN_COMMANDS.md § SSH 
 
 ## Run via Docker compose (production-style)
 
-The same code can run fully containerized using `docker-compose.yml`. Slower iteration but matches what the binary installer does:
+The same code can run fully containerized using `docker-compose.yml`. Slower iteration but matches what `scripts/install.sh` produces:
 
 ```bash
 docker compose up -d
@@ -152,7 +151,6 @@ apps/
   orchestrator-jupyter/  # Go + Gin (creates Jupyter containers)
   orchestrator-hosting/  # Go + Gin (creates Ollama containers + DMR)
   web/                   # Next.js 15
-  installer/             # Bun-compiled installer binary
 
 packages/
   db/      # Drizzle schema + client + migrations
@@ -161,37 +159,21 @@ packages/
   models/  # Catalog refresh logic (HuggingFace + Hub + Ollama)
 ```
 
-## Build the installer locally
+## Test the installer locally
 
-If you want to test the installer itself without publishing a release:
-
-```bash
-# Run in dev (no compile)
-cd apps/installer
-pnpm install
-pnpm dev
-
-# Or build a binary for your arch
-pnpm build           # outputs apps/installer/dist/orqestra-install
-./dist/orqestra-install
-```
-
-Cross-arch builds:
+`scripts/install.sh` is pure bash; no build step. Test against a fork or branch:
 
 ```bash
-pnpm --filter @orqestra/installer build:all
-ls apps/installer/dist/
-# orqestra-install-linux-x64
-# orqestra-install-linux-arm64
-# orqestra-install-darwin-x64
-# orqestra-install-darwin-arm64
+ORQESTRA_REPO_URL=https://github.com/your-fork/Orqestra.git \
+ORQESTRA_REPO_REF=feature-branch \
+  bash scripts/install.sh --mode local --dir /tmp/orq-test --skip-build
 ```
 
-To release these as a new version, see [RELEASING.md](RELEASING.md).
+`--skip-build` stops after `.env` + network creation so you can iterate without 5–15 minute Docker builds.
 
 ## Tests
 
-There are none yet — this is v0.1. The verify step in the installer (curl health endpoints) is the smoke test.
+There are none yet — this is v0.1. The verify step in `install.sh` (curl health endpoints) is the smoke test.
 
 ## Common issues
 

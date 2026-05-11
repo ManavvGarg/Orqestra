@@ -96,7 +96,6 @@ apps/
   orchestrator-jupyter/ Go + Gin (Jupyter container manager)
   orchestrator-hosting/ Go + Gin (LLM hosting + catalog)
   web/                  Next.js 15 dashboard
-  installer/            Bun-compiled single-binary installer
 packages/
   db/                   Drizzle schema + client
   trpc/                 Shared routers + types
@@ -106,7 +105,7 @@ docker/
   traefik/              Traefik config + acme.json
   jupyter-images/       Optional custom Jupyter images
 scripts/
-  install.sh            curl-bash bootstrap
+  install.sh            Full bash installer (no binaries; runs every step)
 docs/                   Documentation
 docker-compose.yml
 turbo.json

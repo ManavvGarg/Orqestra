@@ -11,201 +11,129 @@ End-user guide. Two flavors: **local** (laptop / dev box) and **server** (public
 
 Windows is not supported. Use WSL2 if needed.
 
-The installer can install Docker + NVIDIA Container Toolkit for you (with sudo). If you prefer to install them manually, the installer prints the exact commands and pauses.
+`install.sh` can install Docker + NVIDIA Container Toolkit for you (with sudo). If you prefer manual installs it prints the exact commands and aborts.
 
 ## One-liner
 
 ```bash
-curl -fsSL https://orqestra.xyz/install | bash
+curl -fsSL https://orqestra.xyz/install.sh | bash
 ```
 
-What that does:
-
-1. Detects your OS + architecture (Linux x64/arm64, macOS Intel/Apple Silicon).
-2. Aborts on Windows with a helpful error.
-3. Downloads the matching binary from the latest GitHub release.
-4. Runs the interactive installer.
-
-To pin a specific version:
+If your environment has no controlling TTY (CI, headless), use one of:
 
 ```bash
-curl -fsSL https://orqestra.xyz/install | bash -s -- --version v0.1.0
+# Process-substitution form (preserves TTY for prompts)
+bash <(curl -fsSL https://orqestra.xyz/install.sh)
+
+# Fully non-interactive — uses defaults + ORQESTRA_* env vars
+curl -fsSL https://orqestra.xyz/install.sh | bash -s -- --non-interactive
 ```
 
-## What the installer asks you
+## Flags
 
-The flow takes 1–2 minutes of input, then 5–15 minutes of automated work.
+All optional — `install.sh` prompts otherwise.
 
-### 1. Mode
+| Flag | Env var | Notes |
+|------|---------|-------|
+| `--mode local\|server` | `ORQESTRA_INSTALL_MODE` | Install profile |
+| `--dir <path>` | `ORQESTRA_INSTALL_DIR` | Default `/opt/orqestra` (root) or `~/orqestra` |
+| `--repo <url>` | `ORQESTRA_REPO_URL` | Source repo (default: main upstream) |
+| `--ref <branch\|tag>` | `ORQESTRA_REPO_REF` | Source ref (default: `main`) |
+| `--domain <fqdn>` | `ORQESTRA_SITE_DOMAIN` | Public domain (server mode) |
+| `--le-email <addr>` | `ORQESTRA_LETS_ENCRYPT_EMAIL` | Let's Encrypt notifications |
+| `--cf-token <token>` | `ORQESTRA_CF_DNS_TOKEN` | Cloudflare API token (Zone.DNS:Edit + Zone.Zone:Read) |
+| `--public-ip <ipv4>` | `ORQESTRA_SERVER_PUBLIC_IP` | Wildcard A record target |
+| `--gpu auto\|off` | `ORQESTRA_GPU_MODE` | GPU support |
+| `--sudo auto\|guide` | `ORQESTRA_SUDO_MODE` | Privileged command behavior |
+| `--skip-build` | `ORQESTRA_SKIP_BUILD=1` | Stop after `.env` + network — operator builds/boots manually |
+| `--non-interactive` | — | Refuse prompts; rely on flags + env |
 
-```
-Pick install mode
-● Local — laptop or dev box
-○ Server — public host + domain
-```
-
-Pick **Local** for development; everything binds to localhost ports. Pick **Server** if you have a public IP and want HTTPS + a real domain.
-
-### 2. Install directory
-
-Where the source repo gets cloned. Defaults to `/opt/orqestra` if you're root, `~/orqestra` otherwise.
-
-### 3. Repo + branch
-
-Defaults to `https://github.com/manavvgarg/Orqestra.git` on `main`. Override with `ORQESTRA_REPO_URL` or `ORQESTRA_REPO_REF` env vars if you maintain a fork.
-
-### 4. System privileges
+## What it does
 
 ```
-Allow the installer to run privileged commands (Docker install,
-firewall, NVIDIA toolkit) via sudo?
+[1]  Check OS                        ✓
+[2]  Pre-flight (disk + RAM + ports) ✓
+[3]  Check tools (git, curl, openssl)✓
+[4]  Ensure Docker + compose         ✓
+[5]  NVIDIA Container Toolkit        ✓  (only if --gpu auto)
+[6]  Open ports 80 + 443             ✓  (server only)
+[7]  Fetch Orqestra source           ✓
+[8]  Write .env                      ✓
+[9]  Wildcard DNS for *.<domain>     ✓  (server only; CF API or manual)
+[10] Create docker proxy network     ✓
+[11] Build Docker images             ⏳ ~5–15 min first time
+[12] Boot infra (postgres+redis)     ✓
+[13] Push DB schema (drizzle-kit)    ✓
+[14] Boot app services               ✓
+[15] Verify health                   ✓
+
+✓ Orqestra is installed.
 ```
 
-- **Yes (auto):** Installer runs `apt install`, `systemctl restart docker`, `ufw allow`, `nvidia-ctk runtime configure` automatically. Prompts for your sudo password if needed.
-- **No (guide):** Installer prints the exact privileged commands and pauses. You run them in another terminal, come back, confirm.
+Server mode targets `https://<domain>`, `https://api.<domain>`, `wss://ws.<domain>`. First HTTPS request triggers Let's Encrypt cert issuance via DNS-01 (~30–60s).
 
-If your shell is already root or has passwordless sudo, this step is silent.
+Local mode targets `http://localhost:{3000,4000,4001}`.
 
-### 5. GPU
+## DNS (server mode)
 
-If `nvidia-smi` is detected, the installer offers to install the NVIDIA Container Toolkit and wire it into Docker. Accept if you want LLM/Jupyter containers to use the GPU. Decline if you'll only run CPU workloads.
-
-### 6. Domain (server mode only)
-
-```
-Public domain (e.g. orqestra.acme.dev)
-Email for Let's Encrypt notifications
-Public IP for *.<domain> → wildcard A record
-```
-
-The installer auto-detects your public IP via `api.ipify.org`. Override if you sit behind NAT or use a different egress IP.
-
-### 7. DNS (server mode only)
-
-```
-● I have a Cloudflare API token — auto-create the wildcard record
-○ I will add the DNS record myself
-```
-
-**Cloudflare auto:** Paste a token with `Zone.DNS:Edit` + `Zone.Zone:Read` scope on the apex domain. The installer creates the wildcard A record via the Cloudflare API.
-
-**Manual:** Installer prints the exact record:
+`install.sh` either calls the Cloudflare API (`--cf-token`) or prints the record for you to add manually:
 
 ```
 Type   Name              Value          TTL   Proxy
 A      *.<domain>        <your-ip>      auto  off (DNS-only)
 ```
 
-You add it at your registrar / DNS provider, then confirm to continue.
+> **Always set Cloudflare proxy to "DNS-only"** (grey cloud). Orange cloud breaks DNS-01 ACME and WebSockets.
 
-> **Always set Cloudflare proxy to "DNS-only"** (grey cloud, not orange). The orange proxy interferes with Let's Encrypt and breaks WebSockets.
-
-### 8. AI diagnostics (optional)
-
-```
-Enable AI diagnostics on failures? Pastes Anthropic key for Claude
-to debug step failures.
-```
-
-If a step fails, you can pick "Diagnose with AI" from the recovery menu. Claude reads the error + filesystem and proposes a fix, which you approve before any commands run. Skip if you don't want LLM cost.
-
-## What runs after the prompts
-
-```
-[1/14]  Check OS compatibility               ✓
-[2/14]  Pre-flight checks (disk + RAM)       ✓
-[3/14]  Check required tools (git, openssl)  ✓
-[4/14]  Ensure Docker + compose plugin       ✓ already installed
-[5/14]  Install NVIDIA Container Toolkit     ✓ (only if GPU)
-[6/14]  Open ports 80 + 443                  ✓ (server only)
-[7/14]  Fetch Orqestra source                ✓
-[8/14]  Write .env                           ✓
-[9/14]  Create proxy network                 ✓
-[10/14] Create wildcard DNS via Cloudflare   ✓ (server + CF auto)
-[11/14] Build Docker images (slow)           ⏳ ~5 min first time
-[12/14] Boot infrastructure                  ✓
-[13/14] Push database schema                 ✓
-[14/14] Boot application services            ✓
-[15/15] Verify health endpoints              ✓
-
-  ✓ Orqestra is live.
-
-  URLs
-    Web:        https://orqestra.acme.dev
-    API:        https://api.orqestra.acme.dev
-    WebSocket:  wss://ws.orqestra.acme.dev
-```
-
-First HTTPS request triggers Let's Encrypt cert issuance via DNS-01 — usually 30–60 seconds. After that, requests are instant.
-
-## Recovery
-
-If a step fails:
-
-```
-✗ Build Docker images failed: Cannot connect to the Docker daemon socket
-What now?
-  ● Retry the same step
-  ○ Diagnose with AI         (only if you provided an Anthropic key)
-  ○ Skip and continue (advanced)
-  ○ Abort install
-```
-
-State is persisted to `<install-dir>/.orqestra-install.json`. If you abort, re-running the same one-liner picks up at the failed step.
+If the Cloudflare zone for the apex domain isn't on the token's account, the API path falls back to the manual guide automatically.
 
 ## Re-running
 
-The one-liner is idempotent. Re-run any time to:
+`install.sh` is idempotent. Re-run any time:
 
-- Resume after an aborted install.
-- Upgrade — the latest binary fetches the latest source ref + rebuilds.
-- Fix a misconfiguration — choose to **not** resume, get fresh prompts.
+- Existing checkout: `git fetch && checkout && pull --ff-only`
+- Existing `.env`: overwritten with current values (regenerates secrets unless `ORQESTRA_*_SECRET` env vars set)
+- Existing docker network: skipped
+- Already-installed Docker / toolkit: skipped
+
+Persistent secrets across re-runs:
+
+```bash
+ORQESTRA_POSTGRES_PASSWORD=... \
+ORQESTRA_BETTER_AUTH_SECRET=... \
+ORQESTRA_INTERNAL_API_SECRET=... \
+  bash <(curl -fsSL https://orqestra.xyz/install.sh) --non-interactive
+```
 
 ## After install
 
-1. Open the Web URL and register the first user (becomes admin).
-2. Manage the stack:
-   ```bash
-   docker compose -f /opt/orqestra/docker-compose.yml ps
-   docker compose -f /opt/orqestra/docker-compose.yml logs -f
-   ```
-3. Stop everything (keeps data):
-   ```bash
-   docker compose -f /opt/orqestra/docker-compose.yml down
-   ```
-4. Permanent removal (deletes Postgres + Redis volumes):
-   ```bash
-   docker compose -f /opt/orqestra/docker-compose.yml down -v
-   ```
-
-## First-run sanity checks
-
 ```bash
-# Open Web
-open https://orqestra.acme.dev   # macOS
-xdg-open https://orqestra.acme.dev   # Linux
+# Manage the stack
+sudo docker compose -f /opt/orqestra/docker-compose.yml ps
+sudo docker compose -f /opt/orqestra/docker-compose.yml logs -f
 
-# Curl API
-curl https://api.orqestra.acme.dev/health
-# {"ok":true,...}
+# Stop (keeps volumes)
+sudo docker compose -f /opt/orqestra/docker-compose.yml down
 
-# Inspect running containers
-docker ps --filter label=orqestra.kind
+# Stop + DELETE Postgres/Redis volumes
+sudo docker compose -f /opt/orqestra/docker-compose.yml down -v
 ```
 
-## Known issues
-
-- **First Docker build takes 5–15 minutes.** Pulling 4 Jupyter images (~15 GB total) + Ollama image + building TS apps. Subsequent boots reuse the cache.
-- **Cloudflare zone must already exist on the account** for `cloudflare-auto` DNS mode. If your domain isn't on Cloudflare, the installer falls back to manual mode automatically.
-- **Docker group membership.** If the installer just installed Docker, your shell may need a re-login (or `newgrp docker`) before non-sudo `docker` commands work. Internal commands during install always use sudo to sidestep this.
+Open the Web URL and register the first user (becomes admin).
 
 ## Uninstalling
 
 ```bash
-docker compose -f /opt/orqestra/docker-compose.yml down -v
-docker network rm proxy
-docker volume prune -f
+sudo docker compose -f /opt/orqestra/docker-compose.yml down -v
+sudo docker network rm proxy
+sudo docker volume prune -f
 sudo rm -rf /opt/orqestra
 ```
 
-That removes the stack, networks, anonymous volumes, and the cloned source. Docker images stay cached — `docker image prune -a` if you want them gone too.
+Docker images stay cached — `docker image prune -a` if you want them gone.
+
+## Known issues
+
+- **First Docker build takes 5–15 minutes.** Pulling 4 Jupyter images (~15 GB total) + Ollama + building TS apps. Subsequent boots reuse cache.
+- **Cloudflare zone must exist on the account** for auto-DNS mode. Otherwise the script falls back to manual.
+- **Docker group membership.** If `install.sh` just installed Docker, you may need `newgrp docker` or re-login before `docker` works without sudo. The installer itself runs docker via sudo to sidestep this.

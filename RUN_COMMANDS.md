@@ -32,7 +32,7 @@ Then just `orq` in any new terminal.
 cd ~/projects/Orqestra
 
 # Docker network (once per machine)
-docker network create proxy
+sudo docker network create proxy
 
 # Install JS deps
 pnpm install
@@ -54,18 +54,18 @@ Postgres + Redis via compose:
 
 ```bash
 cd ~/projects/Orqestra
-docker compose up -d postgres redis
-docker compose ps   # confirm healthy
+sudo docker compose up -d postgres redis
+sudo docker compose ps   # confirm healthy
 ```
 
 Stop infra:
 ```bash
-docker compose stop postgres redis
+sudo docker compose stop postgres redis
 ```
 
 Full reset (DESTROYS DB DATA):
 ```bash
-docker compose down -v
+sudo docker compose down -v
 ```
 
 ---
@@ -167,12 +167,13 @@ curl -s localhost:12434/engines/v1/models | jq    # DMR gateway
 
 ## DMR (Docker Model Runner)
 
+Replace with sudo-prefixed invocations if your user cannot access the Docker socket directly:
 ```bash
-docker model status            # daemon state + backends
-docker model ls                # pulled models
-docker model pull ai/smollm2   # pull a model
-docker model rm ai/smollm2     # remove
-docker port docker-model-runner   # confirm gateway port (default 12434)
+sudo docker model status            # daemon state + backends
+sudo docker model ls                # pulled models
+sudo docker model pull ai/smollm2   # pull a model
+sudo docker model rm ai/smollm2     # remove
+sudo docker port docker-model-runner   # confirm gateway port (default 12434)
 ```
 
 DMR gateway env override:
@@ -214,22 +215,22 @@ pnpm --filter @orqestra/api typecheck   # one app
 
 ```bash
 # All Orqestra containers
-docker ps --filter label=orqestra.kind
+sudo docker ps --filter label=orqestra.kind
 
 # Just Jupyter
-docker ps --filter label=orqestra.kind=jupyter
+sudo docker ps --filter label=orqestra.kind=jupyter
 
 # Live logs of one container
-docker logs -f orqestra-jupyter-<slug>
+sudo docker logs -f orqestra-jupyter-<slug>
 
 # Resource stats
-docker stats orqestra-jupyter-<slug>
+sudo docker stats orqestra-jupyter-<slug>
 
 # Wipe a stuck Jupyter project (destructive — drops volume)
 SLUG=<slug>
 USERID_NODASHES=$(echo $USER_UUID | tr -d '-')
-docker rm -f orqestra-jupyter-$SLUG
-docker volume rm orqestra_${USERID_NODASHES}_$SLUG
+sudo docker rm -f orqestra-jupyter-$SLUG
+sudo docker volume rm orqestra_${USERID_NODASHES}_$SLUG
 ```
 
 ---
@@ -237,15 +238,15 @@ docker volume rm orqestra_${USERID_NODASHES}_$SLUG
 ## Compose reference
 
 ```bash
-docker compose ps                         # services + health
-docker compose logs -f postgres           # tail one service
-docker compose logs -f --tail=80          # all services
-docker compose restart postgres           # bounce one service
-docker compose pull                       # pull new images
-docker compose build                      # build app images locally
-docker compose up -d                      # full stack (production-style)
-docker compose down                       # stop everything (keeps volumes)
-docker compose down -v                    # stop + DELETE volumes (destroys DB)
+sudo docker compose ps                         # services + health
+sudo docker compose logs -f postgres           # tail one service
+sudo docker compose logs -f --tail=80          # all services
+sudo docker compose restart postgres           # bounce one service
+sudo docker compose pull                       # pull new images
+sudo docker compose build                      # build app images locally
+sudo docker compose up -d                      # full stack (production-style)
+sudo docker compose down                       # stop everything (keeps volumes)
+sudo docker compose down -v                    # stop + DELETE volumes (destroys DB)
 ```
 
 ---
@@ -255,14 +256,14 @@ docker compose down -v                    # stop + DELETE volumes (destroys DB)
 ```bash
 # Ctrl+C in each app terminal (T1-T5)
 # Ctrl+C the laptop SSH tunnel
-docker compose stop postgres redis
+sudo docker compose stop postgres redis
 
 # Or full teardown (keeps volumes):
-docker compose down
+sudo docker compose down
 
 # Or nuclear (LOSES DATA):
-docker compose down -v
-docker volume prune -f
+sudo docker compose down -v
+sudo docker volume prune -f
 ```
 
 ---
@@ -273,9 +274,9 @@ Add to `~/.bashrc`:
 
 ```bash
 alias orq='cd ~/projects/Orqestra && set -a && source .env && set +a'
-alias orq-up='cd ~/projects/Orqestra && docker compose up -d postgres redis'
-alias orq-down='cd ~/projects/Orqestra && docker compose stop postgres redis'
-alias orq-ps='docker ps --filter label=orqestra.kind --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"'
+alias orq-up='cd ~/projects/Orqestra && sudo docker compose up -d postgres redis'
+alias orq-down='cd ~/projects/Orqestra && sudo docker compose stop postgres redis'
+alias orq-ps='sudo docker ps --filter label=orqestra.kind --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"'
 alias orq-health='for p in 4000 4001 8080 8081 12434; do echo -n "$p: "; curl -s -o /dev/null -w "%{http_code}\n" localhost:$p/health 2>/dev/null || echo down; done'
 ```
 
@@ -286,14 +287,14 @@ alias orq-health='for p in 4000 4001 8080 8081 12434; do echo -n "$p: "; curl -s
 | Symptom | Fix |
 |---------|-----|
 | `DATABASE_URL not set` | Forgot `set -a; source .env; set +a` in that terminal |
-| `network proxy not found` | `docker network create proxy` |
+| `network proxy not found` | `sudo docker network create proxy` |
 | `Port already in use` | `lsof -i :4000` then kill |
 | Better Auth 500s on signup | Re-run `pnpm --filter @orqestra/db db:push` |
 | Go orchestrator can't reach docker | User in `docker` group? `sudo usermod -aG docker $USER && newgrp docker` |
 | Jupyter URL `localhost:<port>` from laptop | Container bound 127.0.0.1; restart T4 with `LOCAL_BIND_IP=0.0.0.0 LOCAL_PUBLIC_HOST=<houdini-ip>` |
 | `docker: unknown command: docker model` | Install `docker-model-plugin` |
-| DMR gateway connection refused | `docker port docker-model-runner` to confirm port; set `DMR_HOST_PORT` |
+| DMR gateway connection refused | `sudo docker port docker-model-runner` to confirm port; set `DMR_HOST_PORT` |
 | pnpm lockfile drift after pull | `rm -rf node_modules pnpm-lock.yaml && pnpm install` |
 | Go toolchain auto-upgrades | `go env -w GOTOOLCHAIN=local` (or install Go 1.25 cleanly) |
 | Detail page log panel empty | Orchestrator started without `REDIS_URL=redis://localhost:6379`. Restart T4/T5 with that env var. |
-| Tail logs manually | `docker compose exec redis redis-cli PSUBSCRIBE 'container-logs:*'` |
+| Tail logs manually | `sudo docker compose exec redis redis-cli PSUBSCRIBE 'container-logs:*'` |
