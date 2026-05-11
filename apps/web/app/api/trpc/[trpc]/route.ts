@@ -1,5 +1,7 @@
 async function proxy(request: Request) {
-  const upstream = process.env.NEXT_PUBLIC_API_URL!;
+  // Server-side proxy: prefer INTERNAL_API_URL (container DNS) over NEXT_PUBLIC_API_URL,
+  // which points at the host and resolves to the web container itself when used server-side.
+  const upstream = (process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL)!;
   const url = new URL(request.url);
   const target = `${upstream}/trpc${url.pathname.replace(/^\/api\/trpc/, "")}${url.search}`;
   return fetch(target, {
