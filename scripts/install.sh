@@ -446,6 +446,14 @@ write_env_file() {
   local ba="${ORQESTRA_BETTER_AUTH_SECRET:-${ba_existing:-$(rand_hex 32)}}"
   local ia="${ORQESTRA_INTERNAL_API_SECRET:-${ia_existing:-$(rand_hex 32)}}"
 
+  # Host docker GID — orchestrators bind /var/run/docker.sock and need this as
+  # a supplementary group to write the socket (their image runs as nonroot).
+  local docker_gid=""
+  if [ -S /var/run/docker.sock ]; then
+    docker_gid="$(stat -c '%g' /var/run/docker.sock 2>/dev/null || stat -f '%g' /var/run/docker.sock 2>/dev/null || echo)"
+  fi
+  [ -z "$docker_gid" ] && docker_gid="988"
+
   local db_url="postgresql://orqestra:${pg}@postgres:5432/orqestra"
   local redis_url="redis://redis:6379"
   local auth_url next_api next_ws next_auth
@@ -489,6 +497,8 @@ write_env_file() {
     echo "NEXT_PUBLIC_API_URL=$next_api"
     echo "NEXT_PUBLIC_WS_URL=$next_ws"
     echo "NEXT_PUBLIC_AUTH_URL=$next_auth"
+    echo
+    echo "DOCKER_GID=$docker_gid"
   } > "$target"
   chmod 600 "$target"
   echo "$target"

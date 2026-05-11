@@ -114,6 +114,8 @@ services:
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - "${DOCKER_GID:-988}"
     environment:
       PORT: 8080
       INTERNAL_API_SECRET: ${INTERNAL_API_SECRET}
@@ -128,6 +130,8 @@ services:
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - "${DOCKER_GID:-988}"
     environment:
       PORT: 8080
       INTERNAL_API_SECRET: ${INTERNAL_API_SECRET}
