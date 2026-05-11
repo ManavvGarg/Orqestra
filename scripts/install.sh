@@ -448,15 +448,18 @@ write_env_file() {
 
   local db_url="postgresql://orqestra:${pg}@postgres:5432/orqestra"
   local redis_url="redis://redis:6379"
-  local auth_url next_api next_ws
+  local auth_url next_api next_ws next_auth
   if [ "$is_local" = "true" ]; then
     auth_url="http://localhost:4000"
     next_api="http://localhost:4000"
     next_ws="ws://localhost:4001"
+    # better-auth client points at web origin; /api/auth/* proxies server-side.
+    next_auth="http://localhost:3000"
   else
     auth_url="https://api.${DOMAIN}"
     next_api="https://api.${DOMAIN}"
     next_ws="wss://ws.${DOMAIN}"
+    next_auth="https://${DOMAIN}"
   fi
 
   # Use heredoc to write canonical .env; prefer matching .env.example structure
@@ -485,6 +488,7 @@ write_env_file() {
     echo
     echo "NEXT_PUBLIC_API_URL=$next_api"
     echo "NEXT_PUBLIC_WS_URL=$next_ws"
+    echo "NEXT_PUBLIC_AUTH_URL=$next_auth"
   } > "$target"
   chmod 600 "$target"
   echo "$target"
