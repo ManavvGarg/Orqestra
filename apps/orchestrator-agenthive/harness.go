@@ -57,7 +57,7 @@ from pydantic import BaseModel
 
 try:
     from agents import Agent, Runner, function_tool, handoff
-    from agents.models.openai_provider import OpenAIProvider
+    from agents.models.openai_chatcompletions import OpenAIChatCompletionsModel
     AGENTS_AVAILABLE = True
 except Exception as e:  # noqa: BLE001
     print(f"[harness] openai-agents import failed: {e}", file=sys.stderr)
@@ -147,14 +147,19 @@ def _build_agents(spec: Dict[str, Any]) -> Dict[str, "Agent"]:
     flows: List[Dict[str, str]] = spec.get("communicationFlows", [])
 
     # First pass: build bare Agent instances so we can reference them in tools.
+    # Each agent gets its own OpenAIChatCompletionsModel wrapping the right
+    # client (OpenAI cloud or a local OpenAI-compat endpoint). This is the
+    # supported per-agent wiring in openai-agents SDK 0.0.x.
     for a in spec.get("agents", []):
         model_client = llm_client_for(a)
-        provider = OpenAIProvider(openai_client=model_client)
+        model = OpenAIChatCompletionsModel(
+            model=llm_model_name(a),
+            openai_client=model_client,
+        )
         agents_by_name[a["name"]] = Agent(
             name=a["name"],
             instructions=a["instructions"],
-            model=llm_model_name(a),
-            model_provider=provider,
+            model=model,
         )
 
     # Second pass: attach send_message tools + handoff targets per flow.
