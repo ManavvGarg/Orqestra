@@ -167,6 +167,19 @@ def _build_agents(spec: Dict[str, Any]) -> Dict[str, "Agent"]:
     for f in flows:
         by_sender.setdefault(f["from"], {})[f["to"]] = f["via"]
 
+    def _make_send_tool(target_agent, target_name: str):
+        # Plain closure capture — no leading-underscore default args, since the
+        # SDK uses pydantic to build a schema from the function signature and
+        # rejects field names with leading underscores.
+        async def send_message(message: str) -> str:
+            result = await Runner.run(target_agent, message)
+            return result.final_output or ""
+        send_message.__name__ = f"send_message_to_{target_name}"
+        send_message.__doc__ = (
+            f"Send a message to the {target_name} agent and return its reply."
+        )
+        return function_tool(send_message, name_override=f"send_message_to_{target_name}")
+
     for sender_name, sender in agents_by_name.items():
         targets = by_sender.get(sender_name, {})
         send_tools = []
@@ -176,15 +189,9 @@ def _build_agents(spec: Dict[str, Any]) -> Dict[str, "Agent"]:
             if receiver is None:
                 continue
             if via == "send_message":
-                # Bind receiver into a closure so the tool can call it.
-                async def _send(message: str, _receiver=receiver, _receiver_name=receiver_name):
-                    result = await Runner.run(_receiver, message)
-                    return result.final_output or ""
-                _send.__name__ = f"send_message_to_{receiver_name}"
-                send_tools.append(function_tool(_send, name_override=f"send_message_to_{receiver_name}"))
+                send_tools.append(_make_send_tool(receiver, receiver_name))
             elif via == "handoff":
                 handoffs.append(handoff(agent=receiver))
-        # Mutate the agent in place via re-construction since Agent is dataclass-ish.
         sender.tools = list(getattr(sender, "tools", [])) + send_tools
         sender.handoffs = list(getattr(sender, "handoffs", [])) + handoffs
 
