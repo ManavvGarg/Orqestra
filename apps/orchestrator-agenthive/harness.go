@@ -7,24 +7,29 @@ const harnessDockerfile = `FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DEFAULT_TIMEOUT=120
 RUN apt-get update && apt-get install -y --no-install-recommends \
       curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
+RUN python -m pip install --upgrade pip
 COPY requirements.txt /app/requirements.txt
-RUN pip install -r /app/requirements.txt
+RUN pip install --verbose -r /app/requirements.txt
 COPY main.py /app/main.py
 EXPOSE 7000
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7000"]
 `
 
-const harnessRequirements = `openai-agents==0.0.20
-openai>=1.55.0,<2.0
-fastapi>=0.115.0,<0.120
-uvicorn>=0.30.0,<0.35
-httpx>=0.27.0,<0.29
-pydantic>=2.7.0,<3.0
+// Pin to verified-published versions. openai-agents on PyPI as of late 2025
+// has releases in the 0.0.x line; using a floor pin keeps us forward-compatible
+// while exposing breaking changes loudly via the harness event handler.
+const harnessRequirements = `openai-agents>=0.0.15
+openai>=1.55.0
+fastapi>=0.115.0
+uvicorn>=0.30.0
+httpx>=0.27.0
+pydantic>=2.7.0
 `
 
 const harnessPython = `"""

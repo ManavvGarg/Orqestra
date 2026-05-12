@@ -140,10 +140,14 @@ func (s *server) buildHarnessImage(ctx context.Context) error {
 	}
 	defer resp.Body.Close()
 	dec := json.NewDecoder(resp.Body)
+	var lastLines []string
 	for {
 		var msg struct {
-			Stream string `json:"stream"`
-			Error  string `json:"error"`
+			Stream      string `json:"stream"`
+			Error       string `json:"error"`
+			ErrorDetail struct {
+				Message string `json:"message"`
+			} `json:"errorDetail"`
 		}
 		if err := dec.Decode(&msg); err != nil {
 			if err == io.EOF {
@@ -151,8 +155,23 @@ func (s *server) buildHarnessImage(ctx context.Context) error {
 			}
 			return err
 		}
-		if msg.Error != "" {
-			return fmt.Errorf("docker build: %s", msg.Error)
+		if msg.Stream != "" {
+			line := strings.TrimRight(msg.Stream, "\n")
+			if line != "" {
+				log.Printf("[build %s] %s", s.cfg.HarnessImage, line)
+				lastLines = append(lastLines, line)
+				if len(lastLines) > 40 {
+					lastLines = lastLines[len(lastLines)-40:]
+				}
+			}
+		}
+		if msg.Error != "" || msg.ErrorDetail.Message != "" {
+			detail := msg.ErrorDetail.Message
+			if detail == "" {
+				detail = msg.Error
+			}
+			tail := strings.Join(lastLines, " | ")
+			return fmt.Errorf("docker build: %s — tail: %s", detail, tail)
 		}
 	}
 	if _, _, err := s.docker.ImageInspectWithRaw(ctx, s.cfg.HarnessImage); err != nil {
