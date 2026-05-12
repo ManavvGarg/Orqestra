@@ -4,7 +4,7 @@ import { use, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "@/lib/auth-client";
-import { AgentMessageStream } from "@/components/agent-message-stream";
+import { AgentBadge, AgentMessageStream, agentColor } from "@/components/agent-message-stream";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -201,36 +201,7 @@ export default function SwarmDetailPage({ params }: { params: Promise<{ id: stri
             />
           ) : null}
 
-          <div className="rounded-md border border-[var(--color-border)] p-3">
-            <div className="mb-2 text-xs uppercase tracking-wide text-[var(--color-muted)]">
-              History
-            </div>
-            <div className="flex flex-col gap-2">
-              {(messagesQ.data ?? []).map((m) => (
-                <div
-                  key={m.id}
-                  className={
-                    "rounded-md border border-[var(--color-border)] p-2 " +
-                    (m.role === "user" ? "bg-[var(--color-accent)]/5" : "bg-white/[0.02]")
-                  }
-                >
-                  <div className="mb-1 text-[10px] uppercase tracking-wide text-[var(--color-muted)]">
-                    {m.role}
-                    {m.sender ? ` · ${m.sender}` : ""}
-                    {m.receiver ? ` → ${m.receiver}` : ""}
-                  </div>
-                  <div className="whitespace-pre-wrap text-sm">
-                    {m.content && (m.content as any).type === "text"
-                      ? (m.content as any).text
-                      : JSON.stringify(m.content)}
-                  </div>
-                </div>
-              ))}
-              {(messagesQ.data ?? []).length === 0 ? (
-                <div className="text-xs text-[var(--color-muted)]">No messages yet.</div>
-              ) : null}
-            </div>
-          </div>
+          <HistoryPanel messages={messagesQ.data ?? []} />
 
           <form onSubmit={sendUserMessage} className="flex gap-2">
             <Input
@@ -257,6 +228,119 @@ export default function SwarmDetailPage({ params }: { params: Promise<{ id: stri
           ) : null}
         </section>
       </div>
+    </div>
+  );
+}
+
+type HistoryMessage = {
+  id: string;
+  sender: string | null;
+  receiver: string | null;
+  role: string;
+  content: unknown;
+  createdAt: Date | string;
+};
+
+function HistoryPanel({ messages }: { messages: HistoryMessage[] }) {
+  const [showTrace, setShowTrace] = useState(false);
+
+  const chatMessages = messages.filter((m) => {
+    const c = m.content as { type?: string } | null;
+    return m.role === "user" || (m.role === "assistant" && c?.type === "text");
+  });
+  const traceMessages = messages.filter(
+    (m) => !(m.role === "user" || (m.role === "assistant" && (m.content as { type?: string } | null)?.type === "text")),
+  );
+
+  const list = showTrace ? messages : chatMessages;
+
+  return (
+    <div className="rounded-md border border-[var(--color-border)] p-3">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="text-xs uppercase tracking-wide text-[var(--color-muted)]">History</div>
+        <label className="flex items-center gap-1.5 text-[10px] text-[var(--color-muted)]">
+          <input
+            type="checkbox"
+            checked={showTrace}
+            onChange={(e) => setShowTrace(e.target.checked)}
+            className="h-3 w-3"
+          />
+          Show tool calls ({traceMessages.length})
+        </label>
+      </div>
+      <div className="flex flex-col gap-2">
+        {list.length === 0 ? (
+          <div className="text-xs text-[var(--color-muted)]">No messages yet.</div>
+        ) : (
+          list.map((m) => <HistoryRow key={m.id} m={m} />)
+        )}
+      </div>
+    </div>
+  );
+}
+
+function HistoryRow({ m }: { m: HistoryMessage }) {
+  const c = m.content as { type?: string; text?: string; name?: string; args?: unknown; result?: unknown } | null;
+  const isUser = m.role === "user";
+  const sender = m.sender ?? (isUser ? "you" : undefined);
+  const color = isUser ? "#a78bfa" : agentColor(sender);
+
+  if (c?.type === "text") {
+    return (
+      <div
+        className="rounded-md border bg-white/[0.02] p-3"
+        style={{ borderColor: `${color}55` }}
+      >
+        <div className="mb-2 flex items-center gap-2">
+          <AgentBadge name={sender} />
+          {m.receiver ? (
+            <>
+              <span className="text-[10px] text-[var(--color-muted)]">→</span>
+              <AgentBadge name={m.receiver} />
+            </>
+          ) : null}
+          <span className="ml-auto text-[10px] uppercase tracking-wide text-[var(--color-muted)]">
+            {m.role}
+          </span>
+        </div>
+        <div className="whitespace-pre-wrap text-sm">{c.text}</div>
+      </div>
+    );
+  }
+
+  if (c?.type === "tool_call") {
+    return (
+      <details className="rounded-md border border-[var(--color-border)] bg-white/[0.02] p-2 text-xs">
+        <summary className="flex cursor-pointer items-center gap-2">
+          <AgentBadge name={sender} />
+          <span className="text-[var(--color-muted)]">calls</span>
+          <span className="font-mono">{c.name}</span>
+        </summary>
+        <pre className="mt-2 overflow-x-auto whitespace-pre-wrap font-mono text-[10px] text-[var(--color-muted)]">
+          {JSON.stringify(c.args, null, 2)}
+        </pre>
+      </details>
+    );
+  }
+
+  if (c?.type === "tool_result") {
+    return (
+      <details className="rounded-md border border-[var(--color-border)] bg-black/30 p-2 text-xs">
+        <summary className="flex cursor-pointer items-center gap-2">
+          <span className="font-mono">{c.name}</span>
+          <span className="text-[var(--color-muted)]">→</span>
+          <AgentBadge name={m.receiver ?? undefined} />
+        </summary>
+        <pre className="mt-2 overflow-x-auto whitespace-pre-wrap font-mono text-[10px]">
+          {typeof c.result === "string" ? c.result : JSON.stringify(c.result, null, 2)}
+        </pre>
+      </details>
+    );
+  }
+
+  return (
+    <div className="rounded-md border border-[var(--color-border)] p-2 font-mono text-[10px] text-[var(--color-muted)]">
+      {JSON.stringify(m.content)}
     </div>
   );
 }

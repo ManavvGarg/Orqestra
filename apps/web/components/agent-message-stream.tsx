@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -43,12 +43,47 @@ function parseEvent(line: string): AgentEvent | null {
   return { type: "raw", text: line };
 }
 
+// Stable per-agent colour so badges are visually distinct.
+const PALETTE = [
+  "#6366f1", // indigo
+  "#10b981", // emerald
+  "#f59e0b", // amber
+  "#ef4444", // red
+  "#06b6d4", // cyan
+  "#ec4899", // pink
+  "#84cc16", // lime
+  "#8b5cf6", // violet
+];
+export function agentColor(name: string | undefined): string {
+  if (!name) return "#6b7280";
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return PALETTE[h % PALETTE.length]!;
+}
+
+export function AgentBadge({ name }: { name: string | undefined }) {
+  const color = agentColor(name);
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide"
+      style={{ borderColor: color, color, backgroundColor: `${color}1f` }}
+    >
+      <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} />
+      {name ?? "—"}
+    </span>
+  );
+}
+
+type Tab = "chat" | "trace";
+
 export function AgentMessageStream({ runId, sessionId, className, onComplete }: Props) {
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [state, setState] = useState<"connecting" | "open" | "done-ok" | "done-fail" | "closed">(
     "connecting",
   );
-  const ref = useRef<HTMLDivElement>(null);
+  const [tab, setTab] = useState<Tab>("chat");
+  const chatRef = useRef<HTMLDivElement>(null);
+  const traceRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const baseUrl = process.env.NEXT_PUBLIC_WS_URL?.replace(/\/$/, "");
@@ -86,14 +121,28 @@ export function AgentMessageStream({ runId, sessionId, className, onComplete }: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runId, sessionId]);
 
+  const chatEvents = useMemo(
+    () => events.filter((e) => e.type === "message" || e.type === "run_final"),
+    [events],
+  );
+  const traceCount = events.length;
+
   useEffect(() => {
-    ref.current?.scrollTo({ top: ref.current.scrollHeight });
+    chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight });
+    traceRef.current?.scrollTo({ top: traceRef.current.scrollHeight });
   }, [events]);
 
   return (
     <div className={cn("flex flex-col rounded-md border border-[var(--color-border)]", className)}>
-      <div className="flex items-center justify-between border-b border-[var(--color-border)] px-3 py-2 text-xs">
-        <span className="text-[var(--color-muted)]">Agent stream</span>
+      <div className="flex items-center justify-between gap-2 border-b border-[var(--color-border)] px-3 py-2 text-xs">
+        <div className="flex items-center gap-1">
+          <TabButton active={tab === "chat"} onClick={() => setTab("chat")}>
+            Chat <span className="opacity-70">{chatEvents.length}</span>
+          </TabButton>
+          <TabButton active={tab === "trace"} onClick={() => setTab("trace")}>
+            Trace <span className="opacity-70">{traceCount}</span>
+          </TabButton>
+        </div>
         <span
           className={cn(
             "font-medium",
@@ -110,18 +159,92 @@ export function AgentMessageStream({ runId, sessionId, className, onComplete }: 
           {state === "closed" && "Disconnected"}
         </span>
       </div>
-      <div ref={ref} className="max-h-[60vh] overflow-y-auto p-3 text-sm">
-        {events.length === 0 ? (
-          <div className="text-[var(--color-muted)]">Waiting for agents…</div>
-        ) : (
-          events.map((e, i) => <EventRow key={i} ev={e} />)
-        )}
-      </div>
+
+      {tab === "chat" ? (
+        <div ref={chatRef} className="max-h-[60vh] overflow-y-auto p-3 text-sm">
+          {chatEvents.length === 0 ? (
+            <div className="text-[var(--color-muted)]">
+              {state === "done-ok"
+                ? "No agent messages produced. Switch to Trace for tool-call detail."
+                : "Waiting for agents…"}
+            </div>
+          ) : (
+            chatEvents.map((e, i) => <ChatBubble key={i} ev={e} />)
+          )}
+        </div>
+      ) : (
+        <div ref={traceRef} className="max-h-[60vh] overflow-y-auto p-3 text-sm">
+          {events.length === 0 ? (
+            <div className="text-[var(--color-muted)]">Waiting for agents…</div>
+          ) : (
+            events.map((e, i) => <TraceRow key={i} ev={e} />)
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-function EventRow({ ev }: { ev: AgentEvent }) {
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "rounded-md px-2 py-1 text-xs",
+        active
+          ? "bg-[var(--color-accent)] text-white"
+          : "text-[var(--color-muted)] hover:bg-white/5",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ChatBubble({ ev }: { ev: AgentEvent }) {
+  if (ev.type === "message") {
+    const color = agentColor(ev.agent);
+    return (
+      <div
+        className="mb-3 rounded-md border bg-white/[0.02] p-3"
+        style={{ borderColor: `${color}55` }}
+      >
+        <div className="mb-2 flex items-center gap-2">
+          <AgentBadge name={ev.agent} />
+          <span className="text-[10px] uppercase tracking-wide text-[var(--color-muted)]">
+            {ev.role}
+          </span>
+        </div>
+        <div className="whitespace-pre-wrap text-sm">{ev.text}</div>
+      </div>
+    );
+  }
+  if (ev.type === "run_final") {
+    return (
+      <div className="mb-3 rounded-md border border-[var(--color-success)]/40 bg-[var(--color-success)]/5 p-3">
+        <div className="mb-2 flex items-center gap-2">
+          <AgentBadge name={ev.agent} />
+          <span className="text-[10px] uppercase tracking-wide text-[var(--color-success)]">
+            final
+          </span>
+        </div>
+        <div className="whitespace-pre-wrap text-sm">{ev.text}</div>
+      </div>
+    );
+  }
+  return null;
+}
+
+function TraceRow({ ev }: { ev: AgentEvent }) {
   switch (ev.type) {
     case "raw":
       return <div className="py-1 font-mono text-xs">{ev.text}</div>;
@@ -132,7 +255,7 @@ function EventRow({ ev }: { ev: AgentEvent }) {
     case "run_start":
       return (
         <div className="border-b border-[var(--color-border)] py-2 text-xs uppercase tracking-wide text-[var(--color-muted)]">
-          Run started · entry <span className="font-mono">{ev.entryAgent}</span>
+          Run started · entry <AgentBadge name={ev.entryAgent} />
         </div>
       );
     case "run_end":
@@ -143,29 +266,32 @@ function EventRow({ ev }: { ev: AgentEvent }) {
       );
     case "agent_updated":
       return (
-        <div className="my-2 text-xs uppercase tracking-wide text-[var(--color-info)]">
-          Active agent → <span className="font-mono">{ev.agent}</span>
+        <div className="my-2 flex items-center gap-2 text-xs">
+          <span className="text-[var(--color-muted)]">Active agent →</span>
+          <AgentBadge name={ev.agent} />
         </div>
       );
     case "handoff":
       return (
-        <div className="my-2 rounded-md border border-[var(--color-info)]/40 bg-[var(--color-info)]/5 px-3 py-2 text-xs">
-          Handoff <span className="font-mono">{ev.from}</span> →{" "}
-          <span className="font-mono">{ev.to ?? "?"}</span>
+        <div className="my-2 flex items-center gap-2 rounded-md border border-[var(--color-info)]/40 bg-[var(--color-info)]/5 px-3 py-2 text-xs">
+          <span className="text-[var(--color-muted)]">Handoff</span>
+          <AgentBadge name={ev.from} /> <span>→</span> <AgentBadge name={ev.to} />
         </div>
       );
     case "handoff_call":
       return (
-        <div className="my-1 text-xs text-[var(--color-muted)]">
-          <span className="font-mono">{ev.agent}</span> requested handoff →{" "}
-          <span className="font-mono">{ev.target}</span>
+        <div className="my-1 flex items-center gap-2 text-xs">
+          <AgentBadge name={ev.agent} />
+          <span className="text-[var(--color-muted)]">requested handoff →</span>
+          <AgentBadge name={ev.target} />
         </div>
       );
     case "tool_call":
       return (
         <div className="my-1 rounded-md border border-[var(--color-border)] bg-white/[0.02] p-2 text-xs">
-          <div className="mb-1 text-[var(--color-muted)]">
-            <span className="font-mono">{ev.agent}</span> calls{" "}
+          <div className="mb-1 flex items-center gap-2">
+            <AgentBadge name={ev.agent} />
+            <span className="text-[var(--color-muted)]">calls</span>
             <span className="font-mono text-[var(--color-fg)]">{ev.name}</span>
           </div>
           <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-[10px] text-[var(--color-muted)]">
@@ -176,9 +302,10 @@ function EventRow({ ev }: { ev: AgentEvent }) {
     case "tool_output":
       return (
         <div className="my-1 rounded-md border border-[var(--color-border)] bg-black/30 p-2 text-xs">
-          <div className="mb-1 text-[var(--color-muted)]">
-            <span className="font-mono">{ev.name}</span> returned to{" "}
-            <span className="font-mono">{ev.agent}</span>
+          <div className="mb-1 flex items-center gap-2">
+            <span className="font-mono">{ev.name}</span>
+            <span className="text-[var(--color-muted)]">→</span>
+            <AgentBadge name={ev.agent} />
           </div>
           <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-[10px]">
             {typeof ev.result === "string" ? ev.result : JSON.stringify(ev.result, null, 2)}
@@ -188,8 +315,11 @@ function EventRow({ ev }: { ev: AgentEvent }) {
     case "message":
       return (
         <div className="mb-3 rounded-md border border-[var(--color-border)] bg-white/[0.02] p-3">
-          <div className="mb-1 text-xs text-[var(--color-muted)]">
-            <span className="font-mono">{ev.agent}</span> · {ev.role}
+          <div className="mb-2 flex items-center gap-2">
+            <AgentBadge name={ev.agent} />
+            <span className="text-[10px] uppercase tracking-wide text-[var(--color-muted)]">
+              {ev.role}
+            </span>
           </div>
           <div className="whitespace-pre-wrap text-sm">{ev.text}</div>
         </div>
@@ -197,16 +327,19 @@ function EventRow({ ev }: { ev: AgentEvent }) {
     case "run_final":
       return (
         <div className="mb-3 rounded-md border border-[var(--color-success)]/40 bg-[var(--color-success)]/5 p-3">
-          <div className="mb-1 text-xs text-[var(--color-muted)]">
-            final · <span className="font-mono">{ev.agent ?? ""}</span>
+          <div className="mb-2 flex items-center gap-2">
+            <AgentBadge name={ev.agent} />
+            <span className="text-[10px] uppercase tracking-wide text-[var(--color-success)]">
+              final
+            </span>
           </div>
           <div className="whitespace-pre-wrap text-sm">{ev.text}</div>
         </div>
       );
     case "reasoning":
       return (
-        <div className="my-1 text-[10px] italic text-[var(--color-muted)]">
-          <span className="font-mono">{ev.agent}</span> reasoning…
+        <div className="my-1 flex items-center gap-2 text-[10px] italic text-[var(--color-muted)]">
+          <AgentBadge name={ev.agent} /> reasoning…
         </div>
       );
     case "unknown_event":
