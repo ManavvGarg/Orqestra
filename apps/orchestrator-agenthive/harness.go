@@ -45,6 +45,7 @@ Each agent message is also POST'd to ${apiCallbackBase}/internal/agenthive/threa
 for Postgres persistence.
 """
 import asyncio
+import contextvars
 import json
 import os
 import sys
@@ -66,6 +67,18 @@ except Exception as e:  # noqa: BLE001
 from openai import AsyncOpenAI
 
 SPEC_PATH = "/etc/orqestra/swarm.json"
+
+# Set per-run so the send_message tool can surface sub-agent replies as
+# first-class messages in the outer stream + persist them to the thread.
+_current_emit_ctx: contextvars.ContextVar = contextvars.ContextVar(
+    "current_emit", default=None
+)
+_current_req_ctx: contextvars.ContextVar = contextvars.ContextVar(
+    "current_req", default=None
+)
+_current_sender_ctx: contextvars.ContextVar = contextvars.ContextVar(
+    "current_sender", default=None
+)
 
 
 def load_spec() -> Dict[str, Any]:
@@ -172,8 +185,52 @@ def _build_agents(spec: Dict[str, Any]) -> Dict[str, "Agent"]:
         # SDK uses pydantic to build a schema from the function signature and
         # rejects field names with leading underscores.
         async def send_message(message: str) -> str:
+            emit = _current_emit_ctx.get()
+            req = _current_req_ctx.get()
+            caller = _current_sender_ctx.get()
+
+            # Surface the inbound prompt so the UI shows the conversation
+            # between agents, not just the final delegation result.
+            if emit is not None:
+                await emit({
+                    "type": "message",
+                    "agent": target_name,
+                    "role": "user",
+                    "text": message,
+                    "from": caller,
+                })
+            if req is not None:
+                await _post_thread_append(req, {
+                    "threadId": req.threadId,
+                    "sender": caller,
+                    "receiver": target_name,
+                    "role": "user",
+                    "content": {"type": "text", "text": message},
+                })
+
             result = await Runner.run(target_agent, message)
-            return result.final_output or ""
+            text = result.final_output if result.final_output is not None else ""
+            text = text if isinstance(text, str) else str(text)
+
+            # Emit the sub-agent's reply as a top-level message so it lands in
+            # the Chat tab and the History panel, not just buried in a tool
+            # result blob.
+            if emit is not None:
+                await emit({
+                    "type": "message",
+                    "agent": target_name,
+                    "role": "assistant",
+                    "text": text,
+                })
+            if req is not None:
+                await _post_thread_append(req, {
+                    "threadId": req.threadId,
+                    "sender": target_name,
+                    "receiver": caller,
+                    "role": "assistant",
+                    "content": {"type": "text", "text": text},
+                })
+            return text
         send_message.__name__ = f"send_message_to_{target_name}"
         send_message.__doc__ = (
             f"Send a message to the {target_name} agent and return its reply."
@@ -229,12 +286,25 @@ def _tool_call_summary(item) -> Dict[str, Any]:
     return {"name": name, "args": parsed}
 
 
-def _tool_output_summary(item) -> Dict[str, Any]:
+def _call_id_of(item) -> str:
     raw = getattr(item, "raw_item", None)
-    name = getattr(raw, "name", None) or "tool"
+    if isinstance(raw, dict):
+        return raw.get("call_id") or ""
+    return getattr(raw, "call_id", "") or ""
+
+
+def _tool_output_summary(item, call_names: Dict[str, str]) -> Dict[str, Any]:
+    raw = getattr(item, "raw_item", None)
+    name = call_names.get(_call_id_of(item), "")
+    if not name:
+        name = getattr(raw, "name", None) if not isinstance(raw, dict) else raw.get("name")
+        name = name or "tool"
     output = getattr(item, "output", None)
     if output is None:
-        output = getattr(raw, "output", None)
+        if isinstance(raw, dict):
+            output = raw.get("output")
+        else:
+            output = getattr(raw, "output", None)
     return {"name": name, "result": output}
 
 
@@ -245,127 +315,135 @@ async def _run_swarm(req: RunRequest, spec: Dict[str, Any], emit):
     if entry_agent is None:
         raise RuntimeError(f"entry agent {entry!r} not in built agents")
 
-    await emit({"type": "run_start", "runId": req.runId, "entryAgent": entry})
+    # Publish context for the send_message tool wrappers to use.
+    emit_tok = _current_emit_ctx.set(emit)
+    req_tok = _current_req_ctx.set(req)
+    sender_tok = _current_sender_ctx.set(entry)
+    try:
+        await emit({"type": "run_start", "runId": req.runId, "entryAgent": entry})
 
-    stream = Runner.run_streamed(entry_agent, req.userMessage)
-    current_agent = entry
+        stream = Runner.run_streamed(entry_agent, req.userMessage)
+        current_agent = entry
+        call_names: Dict[str, str] = {}
 
-    async for event in stream.stream_events():
-        e_type = getattr(event, "type", None)
+        async for event in stream.stream_events():
+            e_type = getattr(event, "type", None)
 
-        # Skip the high-volume token-level raw events for v0 — UI only needs
-        # whole-message granularity per the plan.
-        if e_type == "raw_response_event":
-            continue
-
-        if e_type == "agent_updated_stream_event":
-            new_agent = getattr(event, "new_agent", None)
-            new_name = getattr(new_agent, "name", None)
-            if new_name:
-                current_agent = new_name
-                await emit({"type": "agent_updated", "agent": new_name})
-            continue
-
-        if e_type == "run_item_stream_event":
-            item = getattr(event, "item", None)
-            if item is None:
+            # Skip the high-volume token-level raw events for v0 — UI only needs
+            # whole-message granularity per the plan.
+            if e_type == "raw_response_event":
                 continue
-            item_type = getattr(item, "type", "unknown")
-            # The current acting agent is on the item itself.
-            item_agent = getattr(getattr(item, "agent", None), "name", None) or current_agent
 
-            if item_type == "message_output_item":
-                text = _extract_text_from_message_item(item)
-                if text:
+            if e_type == "agent_updated_stream_event":
+                new_agent = getattr(event, "new_agent", None)
+                new_name = getattr(new_agent, "name", None)
+                if new_name:
+                    current_agent = new_name
+                    _current_sender_ctx.set(new_name)
+                    await emit({"type": "agent_updated", "agent": new_name})
+                continue
+
+            if e_type == "run_item_stream_event":
+                item = getattr(event, "item", None)
+                if item is None:
+                    continue
+                item_type = getattr(item, "type", "unknown")
+                item_agent = getattr(getattr(item, "agent", None), "name", None) or current_agent
+
+                if item_type == "message_output_item":
+                    text = _extract_text_from_message_item(item)
+                    if text:
+                        await emit({
+                            "type": "message",
+                            "agent": item_agent,
+                            "role": "assistant",
+                            "text": text,
+                        })
+                        await _post_thread_append(req, {
+                            "threadId": req.threadId,
+                            "sender": item_agent,
+                            "receiver": None,
+                            "role": "assistant",
+                            "content": {"type": "text", "text": text},
+                        })
+                elif item_type == "tool_call_item":
+                    summary = _tool_call_summary(item)
+                    call_id = _call_id_of(item)
+                    if call_id:
+                        call_names[call_id] = summary["name"]
                     await emit({
-                        "type": "message",
+                        "type": "tool_call",
                         "agent": item_agent,
-                        "role": "assistant",
-                        "text": text,
+                        "name": summary["name"],
+                        "args": summary["args"],
                     })
                     await _post_thread_append(req, {
                         "threadId": req.threadId,
                         "sender": item_agent,
                         "receiver": None,
                         "role": "assistant",
-                        "content": {"type": "text", "text": text},
+                        "content": {
+                            "type": "tool_call",
+                            "name": summary["name"],
+                            "args": summary["args"],
+                        },
+                        "toolCalls": [{
+                            "id": call_id,
+                            "name": summary["name"],
+                            "args": summary["args"],
+                        }],
                     })
-            elif item_type == "tool_call_item":
-                summary = _tool_call_summary(item)
-                await emit({
-                    "type": "tool_call",
-                    "agent": item_agent,
-                    "name": summary["name"],
-                    "args": summary["args"],
-                })
-                await _post_thread_append(req, {
-                    "threadId": req.threadId,
-                    "sender": item_agent,
-                    "receiver": None,
-                    "role": "assistant",
-                    "content": {
-                        "type": "tool_call",
-                        "name": summary["name"],
-                        "args": summary["args"],
-                    },
-                    "toolCalls": [{
-                        "id": getattr(getattr(item, "raw_item", None), "call_id", "") or "",
-                        "name": summary["name"],
-                        "args": summary["args"],
-                    }],
-                })
-            elif item_type == "tool_call_output_item":
-                summary = _tool_output_summary(item)
-                await emit({
-                    "type": "tool_output",
-                    "agent": item_agent,
-                    "name": summary["name"],
-                    "result": summary["result"],
-                })
-                await _post_thread_append(req, {
-                    "threadId": req.threadId,
-                    "sender": "tool",
-                    "receiver": item_agent,
-                    "role": "tool",
-                    "content": {
-                        "type": "tool_result",
+                elif item_type == "tool_call_output_item":
+                    summary = _tool_output_summary(item, call_names)
+                    await emit({
+                        "type": "tool_output",
+                        "agent": item_agent,
                         "name": summary["name"],
                         "result": summary["result"],
-                    },
-                })
-            elif item_type == "handoff_call_item":
-                summary = _tool_call_summary(item)
-                await emit({
-                    "type": "handoff_call",
-                    "agent": item_agent,
-                    "target": summary["name"],
-                    "args": summary["args"],
-                })
-            elif item_type == "handoff_output_item":
-                # SDK exposes source + target agents on the handoff output item.
-                source = getattr(getattr(item, "source_agent", None), "name", None)
-                target = getattr(getattr(item, "target_agent", None), "name", None)
-                await emit({
-                    "type": "handoff",
-                    "from": source or item_agent,
-                    "to": target,
-                })
-            elif item_type == "reasoning_item":
-                # Visible reasoning summary (o-series models). Skip persistence
-                # to keep the thread compact but emit for live view.
-                await emit({"type": "reasoning", "agent": item_agent})
-            continue
+                    })
+                    await _post_thread_append(req, {
+                        "threadId": req.threadId,
+                        "sender": "tool",
+                        "receiver": item_agent,
+                        "role": "tool",
+                        "content": {
+                            "type": "tool_result",
+                            "name": summary["name"],
+                            "result": summary["result"],
+                        },
+                    })
+                elif item_type == "handoff_call_item":
+                    summary = _tool_call_summary(item)
+                    await emit({
+                        "type": "handoff_call",
+                        "agent": item_agent,
+                        "target": summary["name"],
+                        "args": summary["args"],
+                    })
+                elif item_type == "handoff_output_item":
+                    source = getattr(getattr(item, "source_agent", None), "name", None)
+                    target = getattr(getattr(item, "target_agent", None), "name", None)
+                    await emit({
+                        "type": "handoff",
+                        "from": source or item_agent,
+                        "to": target,
+                    })
+                elif item_type == "reasoning_item":
+                    await emit({"type": "reasoning", "agent": item_agent})
+                continue
 
-        # Unknown event type — emit minimal record for debugging without
-        # crashing on schema drift.
-        await emit({"type": "unknown_event", "kind": e_type or "unset"})
+            await emit({"type": "unknown_event", "kind": e_type or "unset"})
 
-    final_output = getattr(stream, "final_output", None)
-    if final_output is not None:
-        text = str(final_output)
-        await emit({"type": "run_final", "text": text, "agent": current_agent})
+        final_output = getattr(stream, "final_output", None)
+        if final_output is not None:
+            text = str(final_output)
+            await emit({"type": "run_final", "text": text, "agent": current_agent})
 
-    await emit({"type": "run_end", "runId": req.runId})
+        await emit({"type": "run_end", "runId": req.runId})
+    finally:
+        _current_emit_ctx.reset(emit_tok)
+        _current_req_ctx.reset(req_tok)
+        _current_sender_ctx.reset(sender_tok)
 
 
 @app.post("/run")
