@@ -70,6 +70,8 @@ services:
       ORCHESTRATOR_JUPYTER_URL: ${ORCHESTRATOR_JUPYTER_URL}
       ORCHESTRATOR_HOSTING_URL: ${ORCHESTRATOR_HOSTING_URL}
       ORCHESTRATOR_SANDBOX_URL: ${ORCHESTRATOR_SANDBOX_URL}
+      ORCHESTRATOR_AGENTHIVE_URL: ${ORCHESTRATOR_AGENTHIVE_URL}
+      INTERNAL_API_CALLBACK_BASE: ${INTERNAL_API_CALLBACK_BASE:-http://api:4000}
       SITE_DOMAIN: ${SITE_DOMAIN}
     ports:
       - "4000:4000"
@@ -157,6 +159,26 @@ services:
     environment:
       # Must match ORCHESTRATOR_SANDBOX_URL in .env.
       PORT: 8082
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET}
+      SITE_DOMAIN: ${SITE_DOMAIN}
+      TRAEFIK_NETWORK: proxy
+      REDIS_URL: ${REDIS_URL}
+      LOCAL_BIND_IP: ${LOCAL_BIND_IP:-}
+      LOCAL_PUBLIC_HOST: ${LOCAL_PUBLIC_HOST:-}
+    networks: [proxy]
+
+  orchestrator-agenthive:
+    build:
+      context: apps/orchestrator-agenthive
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - "${DOCKER_GID:-988}"
+    environment:
+      # Must match ORCHESTRATOR_AGENTHIVE_URL in .env.
+      PORT: 8083
       INTERNAL_API_SECRET: ${INTERNAL_API_SECRET}
       SITE_DOMAIN: ${SITE_DOMAIN}
       TRAEFIK_NETWORK: proxy

@@ -12,8 +12,10 @@ import {
   ensureCatalogSchedule,
   startModelCreateWorker,
   startModelReadyWorker,
+  startAgenthiveRunWorker,
 } from "./queue";
 import { filesRoutes } from "./routes/files";
+import { agenthiveInternalRoutes } from "./routes/agenthive-internal";
 import { log } from "./log";
 
 const app = new Hono();
@@ -50,6 +52,7 @@ app.get("/health", (c) => c.json({ ok: true, ts: Date.now() }));
 app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 
 app.route("/files", filesRoutes);
+app.route("/internal/agenthive", agenthiveInternalRoutes);
 
 app.use(
   "/trpc/*",
@@ -63,6 +66,7 @@ app.use(
 const catalogWorker = startCatalogWorker();
 const modelCreateWorker = startModelCreateWorker();
 const modelReadyWorker = startModelReadyWorker();
+const agenthiveRunWorker = startAgenthiveRunWorker();
 ensureCatalogSchedule().catch((err) =>
   log.error({ err: err instanceof Error ? err.message : err }, "catalog schedule failed"),
 );
@@ -73,6 +77,7 @@ const shutdown = async (signal: string) => {
     catalogWorker.close(),
     modelCreateWorker.close(),
     modelReadyWorker.close(),
+    agenthiveRunWorker.close(),
   ]);
   process.exit(0);
 };

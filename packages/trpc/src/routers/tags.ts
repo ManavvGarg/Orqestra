@@ -12,6 +12,8 @@ import {
   projectTags,
   sandboxProjectTags,
   sandboxProjects,
+  swarmTags,
+  swarms,
 } from "@orqestra/db";
 import { protectedProcedure, router } from "../trpc";
 
@@ -21,7 +23,7 @@ const tagColorSchema = z
   .trim()
   .regex(/^#[0-9A-Fa-f]{6}$/)
   .default("#6366f1");
-const projectKindSchema = z.enum(["jupyter", "model", "sandbox"]);
+const projectKindSchema = z.enum(["jupyter", "model", "sandbox", "swarm"]);
 type ProjectKind = z.infer<typeof projectKindSchema>;
 
 async function getOwnedTag(userId: string, tagId: string) {
@@ -46,6 +48,12 @@ async function ensureOwnedProject(userId: string, kind: ProjectKind, projectId: 
       .select({ id: sandboxProjects.id })
       .from(sandboxProjects)
       .where(and(eq(sandboxProjects.id, projectId), eq(sandboxProjects.userId, userId)))
+      .limit(1);
+  } else if (kind === "swarm") {
+    [project] = await db
+      .select({ id: swarms.id })
+      .from(swarms)
+      .where(and(eq(swarms.id, projectId), eq(swarms.userId, userId)))
       .limit(1);
   } else {
     [project] = await db
@@ -150,6 +158,11 @@ export const tagsRouter = router({
           .insert(sandboxProjectTags)
           .values({ projectId: input.projectId, tagId: input.tagId })
           .onConflictDoNothing();
+      } else if (input.projectKind === "swarm") {
+        await db
+          .insert(swarmTags)
+          .values({ projectId: input.projectId, tagId: input.tagId })
+          .onConflictDoNothing();
       } else {
         await db
           .insert(modelProjectTags)
@@ -188,6 +201,15 @@ export const tagsRouter = router({
             and(
               eq(sandboxProjectTags.projectId, input.projectId),
               eq(sandboxProjectTags.tagId, input.tagId),
+            ),
+          );
+      } else if (input.projectKind === "swarm") {
+        await db
+          .delete(swarmTags)
+          .where(
+            and(
+              eq(swarmTags.projectId, input.projectId),
+              eq(swarmTags.tagId, input.tagId),
             ),
           );
       } else {

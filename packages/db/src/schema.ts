@@ -59,6 +59,22 @@ export const modelProjectStatus = pgEnum("model_project_status", [
   "errored",
 ]);
 
+export const swarmStatus = pgEnum("swarm_status", [
+  "creating",
+  "running",
+  "stopped",
+  "destroyed",
+  "errored",
+]);
+
+export const agentRunStatus = pgEnum("agent_run_status", [
+  "queued",
+  "running",
+  "succeeded",
+  "failed",
+  "cancelled",
+]);
+
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
@@ -206,6 +222,93 @@ export const sandboxProjects = pgTable("sandbox_projects", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export type SwarmAgentLlm =
+  | { backend: "openai"; model: string }
+  | { backend: "local"; modelProjectId: string };
+
+export type SwarmAgentDef = {
+  name: string;
+  role: string;
+  instructions: string;
+  llm: SwarmAgentLlm;
+  tools?: Array<{ type: "builtin"; name: "send_message" | "handoff" }>;
+};
+
+export type SwarmCommunicationFlow = {
+  from: string;
+  to: string;
+  via: "send_message" | "handoff";
+};
+
+export type SwarmSpec = {
+  agents: SwarmAgentDef[];
+  communicationFlows: SwarmCommunicationFlow[];
+  orchestration: {
+    entryAgent: string;
+    defaultPattern: "auto" | "handoff" | "orchestrator_worker";
+  };
+};
+
+export type SwarmMessageContent =
+  | { type: "text"; text: string }
+  | { type: "tool_call"; name: string; args: Record<string, unknown> }
+  | { type: "tool_result"; name: string; result: unknown };
+
+export type SwarmToolCall = {
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
+};
+
+export const swarms = pgTable("swarms", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  description: text("description"),
+  spec: jsonb("spec").$type<SwarmSpec>().notNull(),
+  containerId: text("container_id"),
+  containerPort: integer("container_port"),
+  status: swarmStatus("status").notNull().default("creating"),
+  cpuLimit: text("cpu_limit"),
+  memoryLimit: text("memory_limit"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const swarmThreads = pgTable("swarm_threads", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  swarmId: uuid("swarm_id").notNull().references(() => swarms.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  title: text("title"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const swarmMessages = pgTable("swarm_messages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  threadId: uuid("thread_id").notNull().references(() => swarmThreads.id, { onDelete: "cascade" }),
+  /** null sender = end-user; "tool" = tool result; else agent name. */
+  sender: text("sender"),
+  receiver: text("receiver"),
+  /** "user" | "assistant" | "tool" | "system" */
+  role: text("role").notNull(),
+  content: jsonb("content").$type<SwarmMessageContent>().notNull(),
+  toolCalls: jsonb("tool_calls").$type<SwarmToolCall[]>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const swarmRuns = pgTable("swarm_runs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  swarmId: uuid("swarm_id").notNull().references(() => swarms.id, { onDelete: "cascade" }),
+  threadId: uuid("thread_id").notNull().references(() => swarmThreads.id, { onDelete: "cascade" }),
+  status: agentRunStatus("status").notNull().default("queued"),
+  errorMessage: text("error_message"),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const projectTags = pgTable(
   "project_tags",
   {
@@ -257,12 +360,53 @@ export const modelProjectTags = pgTable(
   }),
 );
 
+export const swarmTags = pgTable(
+  "swarm_tags",
+  {
+    projectId: uuid("project_id").notNull().references(() => swarms.id, { onDelete: "cascade" }),
+    tagId: uuid("tag_id").notNull().references(() => projectTags.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.projectId, table.tagId] }),
+  }),
+);
+
 export const usersRelations = relations(users, ({ many }) => ({
   sessions: many(sessions),
   jupyterProjects: many(jupyterProjects),
   modelProjects: many(modelProjects),
   sandboxProjects: many(sandboxProjects),
+  swarms: many(swarms),
   projectTags: many(projectTags),
+}));
+
+export const swarmsRelations = relations(swarms, ({ one, many }) => ({
+  user: one(users, { fields: [swarms.userId], references: [users.id] }),
+  threads: many(swarmThreads),
+  runs: many(swarmRuns),
+  tags: many(swarmTags),
+}));
+
+export const swarmThreadsRelations = relations(swarmThreads, ({ one, many }) => ({
+  swarm: one(swarms, { fields: [swarmThreads.swarmId], references: [swarms.id] }),
+  user: one(users, { fields: [swarmThreads.userId], references: [users.id] }),
+  messages: many(swarmMessages),
+  runs: many(swarmRuns),
+}));
+
+export const swarmMessagesRelations = relations(swarmMessages, ({ one }) => ({
+  thread: one(swarmThreads, { fields: [swarmMessages.threadId], references: [swarmThreads.id] }),
+}));
+
+export const swarmRunsRelations = relations(swarmRuns, ({ one }) => ({
+  swarm: one(swarms, { fields: [swarmRuns.swarmId], references: [swarms.id] }),
+  thread: one(swarmThreads, { fields: [swarmRuns.threadId], references: [swarmThreads.id] }),
+}));
+
+export const swarmTagsRelations = relations(swarmTags, ({ one }) => ({
+  project: one(swarms, { fields: [swarmTags.projectId], references: [swarms.id] }),
+  tag: one(projectTags, { fields: [swarmTags.tagId], references: [projectTags.id] }),
 }));
 
 export const sandboxProjectsRelations = relations(sandboxProjects, ({ one, many }) => ({
@@ -294,6 +438,7 @@ export const projectTagsRelations = relations(projectTags, ({ one, many }) => ({
   jupyterProjects: many(jupyterProjectTags),
   modelProjects: many(modelProjectTags),
   sandboxProjects: many(sandboxProjectTags),
+  swarms: many(swarmTags),
 }));
 
 export const jupyterProjectTagsRelations = relations(jupyterProjectTags, ({ one }) => ({
@@ -324,3 +469,11 @@ export type ProjectTag = typeof projectTags.$inferSelect;
 export type NewProjectTag = typeof projectTags.$inferInsert;
 export type SandboxProject = typeof sandboxProjects.$inferSelect;
 export type NewSandboxProject = typeof sandboxProjects.$inferInsert;
+export type Swarm = typeof swarms.$inferSelect;
+export type NewSwarm = typeof swarms.$inferInsert;
+export type SwarmThread = typeof swarmThreads.$inferSelect;
+export type NewSwarmThread = typeof swarmThreads.$inferInsert;
+export type SwarmMessage = typeof swarmMessages.$inferSelect;
+export type NewSwarmMessage = typeof swarmMessages.$inferInsert;
+export type SwarmRun = typeof swarmRuns.$inferSelect;
+export type NewSwarmRun = typeof swarmRuns.$inferInsert;

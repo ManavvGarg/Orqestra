@@ -41,12 +41,14 @@ subscriber.on("pmessage", (_pattern, channel, message) => {
   const sockets = rooms.get(projectId);
   if (!sockets || sockets.size === 0) return;
 
-  if (message === "__BUILD_COMPLETE__" || message === "__BUILD_FAILED__") {
-    const payload = JSON.stringify({
-      type: "done",
-      projectId,
-      ok: message === "__BUILD_COMPLETE__",
-    });
+  if (
+    message === "__BUILD_COMPLETE__" ||
+    message === "__BUILD_FAILED__" ||
+    message === "__RUN_COMPLETE__" ||
+    message === "__RUN_FAILED__"
+  ) {
+    const ok = message === "__BUILD_COMPLETE__" || message === "__RUN_COMPLETE__";
+    const payload = JSON.stringify({ type: "done", projectId, ok });
     for (const ws of sockets) ws.send(payload);
     return;
   }

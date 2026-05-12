@@ -6,6 +6,7 @@ import { modelsRouter } from "./routers/models";
 import { filesRouter } from "./routers/files";
 import { tagsRouter } from "./routers/tags";
 import { sandboxRouter } from "./routers/sandbox";
+import { agenthiveRouter } from "./routers/agenthive";
 
 export const appRouter = router({
   auth: authRouter,
@@ -15,6 +16,7 @@ export const appRouter = router({
   files: filesRouter,
   tags: tagsRouter,
   sandbox: sandboxRouter,
+  agenthive: agenthiveRouter,
 });
 
 export type AppRouter = typeof appRouter;

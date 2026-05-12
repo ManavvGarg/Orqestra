@@ -47,7 +47,18 @@ interface SandboxRow {
   tags?: ProjectTag[];
 }
 
-type Project = JupyterRow | ModelRow | SandboxRow;
+interface SwarmRow {
+  kind: "swarm";
+  id: string;
+  name: string;
+  slug: string;
+  status: "running" | "stopped" | "creating" | "destroyed" | "errored";
+  spec?: { agents?: Array<{ name: string }> };
+  createdAt: Date | string;
+  tags?: ProjectTag[];
+}
+
+type Project = JupyterRow | ModelRow | SandboxRow | SwarmRow;
 
 export function ProjectCard({
   project,
@@ -73,7 +84,9 @@ export function ProjectCard({
       ? `/jupyter/${project.id}`
       : project.kind === "sandbox"
         ? `/sandbox/${project.id}`
-        : `/models/${project.id}`;
+        : project.kind === "swarm"
+          ? `/swarms/${project.id}`
+          : `/models/${project.id}`;
   const externalUrl =
     project.kind === "jupyter"
       ? project.containerUrl
@@ -123,7 +136,9 @@ export function ProjectCard({
               ? `Jupyter · ${project.jobType}`
               : project.kind === "sandbox"
                 ? `Sandbox · ${project.distro}`
-                : "Static hosting"}
+                : project.kind === "swarm"
+                  ? `Swarm · ${project.spec?.agents?.length ?? 0} agents`
+                  : "Static hosting"}
           </div>
         </div>
         <StatusBadge status={status} />

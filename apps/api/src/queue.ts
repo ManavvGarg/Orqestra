@@ -1,6 +1,6 @@
 import { Queue, Worker, type Job } from "bullmq";
 import IORedis from "ioredis";
-import { db, models, modelProjects, eq } from "@orqestra/db";
+import { db, models, modelProjects, eq, swarmRuns, swarms } from "@orqestra/db";
 import { refreshCatalog } from "@orqestra/models/refresh";
 import { env } from "@orqestra/env/api";
 import { orchestrators } from "./orchestrator-clients";
@@ -281,5 +281,89 @@ export function startModelReadyWorker(): Worker<ModelReadyJob> {
     log.error({ jobId: job?.id, error: err instanceof Error ? err.message : String(err) }, "model-ready job failed");
   });
 
+  return worker;
+}
+
+// ----------------------------------------------------------------
+// AgentHive — long-running swarm runs.
+// Container = per-swarm. Run = one user-turn → many agent turns.
+// Worker dials orchestrator-agenthive's /run; the orchestrator streams
+// agent events back via the existing Redis container-logs channel and
+// the Python harness POSTs each message to /internal/agenthive/thread-append.
+// ----------------------------------------------------------------
+
+interface AgenthiveRunJob {
+  runId: string;
+  swarmId: string;
+  threadId: string;
+  userMessage: string;
+}
+
+const AGENTHIVE_RUN_QUEUE = "agenthive-run";
+
+export const agenthiveRunQueue = new Queue<AgenthiveRunJob>(AGENTHIVE_RUN_QUEUE, { connection });
+
+export async function enqueueAgenthiveRun(input: AgenthiveRunJob) {
+  await agenthiveRunQueue.add("run", input, {
+    jobId: `agenthive-run-${input.runId}`,
+    removeOnComplete: { count: 100 },
+    removeOnFail: { count: 100 },
+    attempts: 1,
+  });
+}
+
+export function startAgenthiveRunWorker(): Worker<AgenthiveRunJob> {
+  const worker = new Worker<AgenthiveRunJob>(
+    AGENTHIVE_RUN_QUEUE,
+    async (job: Job<AgenthiveRunJob>) => {
+      const { runId, swarmId, threadId, userMessage } = job.data;
+      const [swarm] = await db.select().from(swarms).where(eq(swarms.id, swarmId)).limit(1);
+      if (!swarm || !swarm.containerId) {
+        await db
+          .update(swarmRuns)
+          .set({
+            status: "failed",
+            errorMessage: "Swarm container missing",
+            finishedAt: new Date(),
+          })
+          .where(eq(swarmRuns.id, runId));
+        return;
+      }
+
+      await db
+        .update(swarmRuns)
+        .set({ status: "running", startedAt: new Date() })
+        .where(eq(swarmRuns.id, runId));
+
+      const callbackBase = env.INTERNAL_API_CALLBACK_BASE ?? "http://api:4000";
+
+      try {
+        await orchestrators.agenthive.run({
+          containerId: swarm.containerId,
+          runId,
+          threadId,
+          swarmId,
+          userMessage,
+          apiCallbackBase: callbackBase,
+          internalSecret: env.INTERNAL_API_SECRET,
+        });
+        await db
+          .update(swarmRuns)
+          .set({ status: "succeeded", finishedAt: new Date() })
+          .where(eq(swarmRuns.id, runId));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "run failed";
+        log.error({ runId, error: message }, "agenthive run failed");
+        await db
+          .update(swarmRuns)
+          .set({ status: "failed", errorMessage: message, finishedAt: new Date() })
+          .where(eq(swarmRuns.id, runId));
+      }
+    },
+    { connection, concurrency: 4 },
+  );
+  worker.on("failed", (job, err) => {
+    log.error({ jobId: job?.id, error: err instanceof Error ? err.message : String(err) }, "agenthive-run job failed");
+  });
   return worker;
 }

@@ -75,4 +75,12 @@ export const orchestrators: OrchestratorClients = {
     destroy: (input) => call(`${env.ORCHESTRATOR_SANDBOX_URL}/internal/sandbox/destroy`, input),
     stats: (input) => call(`${env.ORCHESTRATOR_SANDBOX_URL}/internal/sandbox/stats`, input),
   },
+  agenthive: {
+    create: (input) => call(`${env.ORCHESTRATOR_AGENTHIVE_URL}/internal/agenthive/create`, input),
+    start: (input) => call(`${env.ORCHESTRATOR_AGENTHIVE_URL}/internal/agenthive/start`, input),
+    stop: (input) => call(`${env.ORCHESTRATOR_AGENTHIVE_URL}/internal/agenthive/stop`, input),
+    destroy: (input) => call(`${env.ORCHESTRATOR_AGENTHIVE_URL}/internal/agenthive/destroy`, input),
+    stats: (input) => call(`${env.ORCHESTRATOR_AGENTHIVE_URL}/internal/agenthive/stats`, input),
+    run: (input) => call(`${env.ORCHESTRATOR_AGENTHIVE_URL}/internal/agenthive/run`, input),
+  },
 };

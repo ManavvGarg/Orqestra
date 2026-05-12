@@ -3,11 +3,12 @@ import type { TrpcContext, JobQueue } from "@orqestra/trpc";
 import { db, users, eq } from "@orqestra/db";
 import { auth } from "./auth";
 import { orchestrators } from "./orchestrator-clients";
-import { enqueueModelCreate, enqueueModelReadyCheck } from "./queue";
+import { enqueueModelCreate, enqueueModelReadyCheck, enqueueAgenthiveRun } from "./queue";
 
 const queue: JobQueue = {
   enqueueModelCreate,
   enqueueModelReadyCheck,
+  enqueueAgenthiveRun,
 };
 
 export async function createContext(c: Context): Promise<TrpcContext> {

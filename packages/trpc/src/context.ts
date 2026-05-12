@@ -149,6 +149,39 @@ export interface OrchestratorClients {
       readAt: string;
     }>;
   };
+  agenthive: {
+    create(input: {
+      swarmId: string;
+      slug: string;
+      userId: string;
+      specJson: string;
+      openaiApiKey?: string;
+      cpuLimit?: string;
+      memoryLimit?: string;
+    }): Promise<{
+      containerId: string;
+      containerPort: number;
+    }>;
+    start(input: { containerId: string }): Promise<{ containerPort?: number }>;
+    stop(input: { containerId: string }): Promise<{ ok: true }>;
+    destroy(input: { containerId: string }): Promise<{ ok: true }>;
+    stats(input: { containerId: string }): Promise<{
+      cpuPercent: number;
+      memoryUsageBytes: number;
+      memoryLimitBytes: number;
+      memoryPercent: number;
+      readAt: string;
+    }>;
+    run(input: {
+      containerId: string;
+      runId: string;
+      threadId: string;
+      swarmId: string;
+      userMessage: string;
+      apiCallbackBase: string;
+      internalSecret: string;
+    }): Promise<{ ok: true }>;
+  };
 }
 
 export interface JobQueue {
@@ -168,6 +201,12 @@ export interface JobQueue {
     containerId: string;
     ref: string;
     runtime: "ollama" | "docker-model-runner" | "llama-cpp";
+  }): Promise<void>;
+  enqueueAgenthiveRun(input: {
+    runId: string;
+    swarmId: string;
+    threadId: string;
+    userMessage: string;
   }): Promise<void>;
 }
 

@@ -16,6 +16,8 @@ export const env = createEnv({
     ORCHESTRATOR_JUPYTER_URL: z.string().url(),
     ORCHESTRATOR_HOSTING_URL: z.string().url(),
     ORCHESTRATOR_SANDBOX_URL: z.string().url(),
+    ORCHESTRATOR_AGENTHIVE_URL: z.string().url(),
+    INTERNAL_API_CALLBACK_BASE: z.string().url().optional(),
     SITE_DOMAIN: z.string().min(1),
   },
   runtimeEnv: process.env,
