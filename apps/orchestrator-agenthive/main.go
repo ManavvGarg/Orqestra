@@ -310,12 +310,13 @@ func (s *server) handleCreate(c *gin.Context) {
 
 	exposed := nat.PortSet{nat.Port("7000/tcp"): struct{}{}}
 
-	// Attach to traefik network so the orchestrator can reach the container
-	// by name during /run. SiteDomain=localhost mode still works because
-	// orchestrator-agenthive runs on the host net via compose if user prefers,
-	// but the default compose deployment runs everything on the `proxy` net.
+	// Always attach to the shared docker network so this orchestrator (also a
+	// container) can reach the harness by container IP via dialHarness().
+	// Port-binding fallback only works when the orchestrator runs on the host;
+	// inside compose, host ports are not reachable from the orchestrator's
+	// network namespace.
 	var netCfg *network.NetworkingConfig
-	if s.cfg.TraefikNetwork != "" && s.cfg.SiteDomain != "localhost" {
+	if s.cfg.TraefikNetwork != "" {
 		netCfg = &network.NetworkingConfig{
 			EndpointsConfig: map[string]*network.EndpointSettings{
 				s.cfg.TraefikNetwork: {},
@@ -414,12 +415,18 @@ func (s *server) handleRun(c *gin.Context) {
 	ctx := c.Request.Context()
 	base, err := s.dialHarness(ctx, req.ContainerID)
 	if err != nil {
+		log.Printf("run %s: dial: %v", req.RunID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "dial: " + err.Error()})
 		return
 	}
+	log.Printf("run %s: dialing harness at %s", req.RunID, base)
 
 	// Wait briefly for harness to be up — fresh containers need ~1-3 s.
 	if !waitForReady(ctx, base+"/health", 30*time.Second) {
+		log.Printf("run %s: harness %s not ready after 30s", req.RunID, base)
+		_ = s.rdb.Publish(ctx, "container-logs:"+req.RunID,
+			`{"type":"error","message":"harness not ready"}`).Err()
+		_ = s.rdb.Publish(ctx, "container-logs:"+req.RunID, "__RUN_FAILED__").Err()
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "harness not ready"})
 		return
 	}
@@ -444,12 +451,20 @@ func (s *server) handleRun(c *gin.Context) {
 	clientHTTP := &http.Client{Timeout: 30 * time.Minute}
 	resp, err := clientHTTP.Do(hreq)
 	if err != nil {
+		log.Printf("run %s: harness POST failed: %v", req.RunID, err)
+		_ = s.rdb.Publish(ctx, "container-logs:"+req.RunID,
+			`{"type":"error","message":"`+escapeJSON(err.Error())+`"}`).Err()
+		_ = s.rdb.Publish(ctx, "container-logs:"+req.RunID, "__RUN_FAILED__").Err()
 		c.JSON(http.StatusBadGateway, gin.H{"error": "harness: " + err.Error()})
 		return
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+		log.Printf("run %s: harness %d: %s", req.RunID, resp.StatusCode, string(body))
+		_ = s.rdb.Publish(ctx, "container-logs:"+req.RunID,
+			`{"type":"error","message":"harness `+strconv.Itoa(resp.StatusCode)+`: `+escapeJSON(string(body))+`"}`).Err()
+		_ = s.rdb.Publish(ctx, "container-logs:"+req.RunID, "__RUN_FAILED__").Err()
 		c.JSON(resp.StatusCode, gin.H{"error": string(body)})
 		return
 	}
@@ -475,6 +490,14 @@ func (s *server) handleRun(c *gin.Context) {
 	}
 	_ = s.rdb.Publish(ctx, channel, "__RUN_COMPLETE__").Err()
 	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func escapeJSON(s string) string {
+	b, err := json.Marshal(s)
+	if err != nil || len(b) < 2 {
+		return ""
+	}
+	return string(b[1 : len(b)-1])
 }
 
 func waitForReady(ctx context.Context, url string, timeout time.Duration) bool {
