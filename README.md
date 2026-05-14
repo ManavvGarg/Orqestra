@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/logo.png" alt="Orqestra logo" width="240" />
+  <img src="docs/assets/banner.png" alt="Orqestra banner" width="240" />
 </p>
 
 # Orqestra
