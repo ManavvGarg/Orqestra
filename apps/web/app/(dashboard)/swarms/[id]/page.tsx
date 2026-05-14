@@ -6,6 +6,7 @@ import Link from "next/link";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "@/lib/auth-client";
 import { AgentBadge, AgentMessageStream, agentColor } from "@/components/agent-message-stream";
+import { MessageMarkdown } from "@/components/message-markdown";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -335,7 +336,7 @@ function HistoryRow({ m }: { m: HistoryMessage }) {
             {m.role}
           </span>
         </div>
-        <div className="whitespace-pre-wrap text-sm">{c.text}</div>
+        <MessageMarkdown>{c.text ?? ""}</MessageMarkdown>
       </div>
     );
   }

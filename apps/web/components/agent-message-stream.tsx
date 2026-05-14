@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { MessageMarkdown } from "./message-markdown";
 
 interface Props {
   runId: string;
@@ -224,7 +225,7 @@ function ChatBubble({ ev }: { ev: AgentEvent }) {
             {ev.role}
           </span>
         </div>
-        <div className="whitespace-pre-wrap text-sm">{ev.text}</div>
+        <MessageMarkdown>{ev.text}</MessageMarkdown>
       </div>
     );
   }
@@ -237,7 +238,7 @@ function ChatBubble({ ev }: { ev: AgentEvent }) {
             final
           </span>
         </div>
-        <div className="whitespace-pre-wrap text-sm">{ev.text}</div>
+        <MessageMarkdown>{ev.text}</MessageMarkdown>
       </div>
     );
   }
@@ -321,7 +322,7 @@ function TraceRow({ ev }: { ev: AgentEvent }) {
               {ev.role}
             </span>
           </div>
-          <div className="whitespace-pre-wrap text-sm">{ev.text}</div>
+          <MessageMarkdown>{ev.text}</MessageMarkdown>
         </div>
       );
     case "run_final":
@@ -333,7 +334,7 @@ function TraceRow({ ev }: { ev: AgentEvent }) {
               final
             </span>
           </div>
-          <div className="whitespace-pre-wrap text-sm">{ev.text}</div>
+          <MessageMarkdown>{ev.text}</MessageMarkdown>
         </div>
       );
     case "reasoning":

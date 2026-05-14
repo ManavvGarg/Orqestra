@@ -189,6 +189,24 @@ async def _post_thread_append(req: RunRequest, payload: Dict[str, Any]) -> None:
         print(f"[harness] thread-append failed: {e}", file=sys.stderr, flush=True)
 
 
+# Appended to every agent's instructions so output is consistently
+# markdown-rendered in the Orqestra chat UI. Agents never see this as their
+# own role — it's a uniform output-formatting contract. NOTE: this lives
+# inside a Go raw string literal, so it must contain no backtick characters;
+# code-fence guidance is therefore described in words.
+FORMATTING_GUIDE = """
+
+---
+OUTPUT FORMATTING (applies to every reply):
+- Write in GitHub-Flavored Markdown.
+- Wrap every code snippet in a triple-backtick fenced block with a language tag (for example: triple-backtick then python).
+- Use single-backtick inline code for identifiers, filenames, and commands.
+- Use real Markdown for headings, lists, and tables — never ASCII art.
+- For math, use LaTeX: inline as $...$ and display as $$...$$. Do not emit raw \\( \\) or \\[ \\] delimiters.
+- Keep prose tight; prefer lists and tables over long paragraphs where it aids clarity.
+"""
+
+
 def _build_agents(spec: Dict[str, Any]) -> Dict[str, "Agent"]:
     """Map agent name -> Agent instance. Wires send_message + handoff per flows."""
     if not AGENTS_AVAILABLE:
@@ -199,11 +217,12 @@ def _build_agents(spec: Dict[str, Any]) -> Dict[str, "Agent"]:
 
     # First pass: build bare Agent instances so we can reference them in tools.
     # model_for() picks the right adapter per agent backend (openai / local /
-    # provider-via-LiteLLM).
+    # provider-via-LiteLLM). Every agent's instructions get the shared
+    # FORMATTING_GUIDE appended so chat output renders cleanly.
     for a in spec.get("agents", []):
         agents_by_name[a["name"]] = Agent(
             name=a["name"],
-            instructions=a["instructions"],
+            instructions=a["instructions"] + FORMATTING_GUIDE,
             model=model_for(a),
         )
 
