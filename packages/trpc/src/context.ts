@@ -155,7 +155,9 @@ export interface OrchestratorClients {
       slug: string;
       userId: string;
       specJson: string;
-      openaiApiKey?: string;
+      /** env var name -> secret value; injected into the harness container.
+       *  e.g. { OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY }. */
+      envKeys?: Record<string, string>;
       cpuLimit?: string;
       memoryLimit?: string;
     }): Promise<{

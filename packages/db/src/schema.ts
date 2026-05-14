@@ -222,8 +222,24 @@ export const sandboxProjects = pgTable("sandbox_projects", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/** Known LiteLLM provider prefixes the UI exposes. `model` is the
+ *  provider-native model id (e.g. "claude-sonnet-4-6", "gemini-2.0-flash").
+ *  The harness composes the LiteLLM ref as `${provider}/${model}`. */
+export type SwarmLlmProvider =
+  | "anthropic"
+  | "gemini"
+  | "groq"
+  | "mistral"
+  | "deepseek"
+  | "openrouter"
+  | "together_ai"
+  | "xai"
+  | "fireworks_ai"
+  | "cohere";
+
 export type SwarmAgentLlm =
   | { backend: "openai"; model: string }
+  | { backend: "provider"; provider: SwarmLlmProvider; model: string }
   | { backend: "local"; modelProjectId: string };
 
 export type SwarmAgentDef = {

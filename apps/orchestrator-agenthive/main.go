@@ -213,13 +213,15 @@ func (s *server) uploadSpec(ctx context.Context, containerID, specJSON string) e
 // ---- Request/response types ----
 
 type createReq struct {
-	SwarmID      string `json:"swarmId" binding:"required"`
-	Slug         string `json:"slug" binding:"required"`
-	UserID       string `json:"userId" binding:"required"`
-	SpecJSON     string `json:"specJson" binding:"required"`
-	OpenAIAPIKey string `json:"openaiApiKey"`
-	CPULimit     string `json:"cpuLimit"`
-	MemoryLimit  string `json:"memoryLimit"`
+	SwarmID  string `json:"swarmId" binding:"required"`
+	Slug     string `json:"slug" binding:"required"`
+	UserID   string `json:"userId" binding:"required"`
+	SpecJSON string `json:"specJson" binding:"required"`
+	// env var name -> secret value; injected into the harness container.
+	// e.g. {"OPENAI_API_KEY": "...", "ANTHROPIC_API_KEY": "..."}.
+	EnvKeys     map[string]string `json:"envKeys"`
+	CPULimit    string            `json:"cpuLimit"`
+	MemoryLimit string            `json:"memoryLimit"`
 }
 
 type createResp struct {
@@ -304,8 +306,16 @@ func (s *server) handleCreate(c *gin.Context) {
 	}
 
 	envVars := []string{"PYTHONUNBUFFERED=1"}
-	if req.OpenAIAPIKey != "" {
-		envVars = append(envVars, "OPENAI_API_KEY="+req.OpenAIAPIKey)
+	for name, val := range req.EnvKeys {
+		if name == "" || val == "" {
+			continue
+		}
+		// Reject anything that isn't a plausible env var name to avoid
+		// injection via crafted keys.
+		if !validEnvName(name) {
+			continue
+		}
+		envVars = append(envVars, name+"="+val)
 	}
 
 	exposed := nat.PortSet{nat.Port("7000/tcp"): struct{}{}}
@@ -662,6 +672,23 @@ func (s *server) handleStats(c *gin.Context) {
 		MemoryPercent:    pct,
 		Pids:             stats.PidsStats.Current,
 	})
+}
+
+// validEnvName allows only A-Z, 0-9, underscore — standard env var grammar.
+func validEnvName(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i, r := range s {
+		switch {
+		case r >= 'A' && r <= 'Z':
+		case r == '_':
+		case r >= '0' && r <= '9' && i > 0:
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func parseCPU(s string) int64 {

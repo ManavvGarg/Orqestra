@@ -24,8 +24,9 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7000"]
 // Pin to verified-published versions. openai-agents on PyPI as of late 2025
 // has releases in the 0.0.x line; using a floor pin keeps us forward-compatible
 // while exposing breaking changes loudly via the harness event handler.
-const harnessRequirements = `openai-agents>=0.0.15
+const harnessRequirements = `openai-agents[litellm]>=0.0.15
 openai>=1.55.0
+litellm>=1.55.0
 fastapi>=0.115.0
 uvicorn>=0.30.0
 httpx>=0.27.0
@@ -64,6 +65,17 @@ except Exception as e:  # noqa: BLE001
     print(f"[harness] openai-agents import failed: {e}", file=sys.stderr)
     AGENTS_AVAILABLE = False
 
+# LiteLLM model adapter — routes the 'provider' backend to Anthropic, Gemini,
+# Groq, Mistral, DeepSeek, etc. via their native APIs. Provider keys arrive as
+# container env vars (ANTHROPIC_API_KEY, GEMINI_API_KEY, ...) which LiteLLM
+# reads automatically.
+try:
+    from agents.extensions.models.litellm_model import LitellmModel
+    LITELLM_AVAILABLE = True
+except Exception as e:  # noqa: BLE001
+    print(f"[harness] litellm extension import failed: {e}", file=sys.stderr)
+    LITELLM_AVAILABLE = False
+
 from openai import AsyncOpenAI
 
 SPEC_PATH = "/etc/orqestra/swarm.json"
@@ -86,31 +98,50 @@ def load_spec() -> Dict[str, Any]:
         return json.load(f)
 
 
-def llm_client_for(agent_spec: Dict[str, Any]) -> AsyncOpenAI:
-    """Return an AsyncOpenAI client pointed at the right backend.
-    The tRPC router resolves model_projects.apiUrl into llm.apiUrl before
-    writing /etc/orqestra/swarm.json, so the harness uses it directly.
+def model_for(agent_spec: Dict[str, Any]):
+    """Build the per-agent Model instance for the openai-agents SDK.
+
+    Three backends:
+      - openai   -> OpenAIChatCompletionsModel against api.openai.com
+      - local    -> OpenAIChatCompletionsModel against a model_projects apiUrl
+                    (resolved by the tRPC router into llm.apiUrl)
+      - provider -> LitellmModel("<provider>/<model>"); LiteLLM reads the
+                    provider key from the container env (ANTHROPIC_API_KEY,
+                    GEMINI_API_KEY, GROQ_API_KEY, ...).
     """
     llm = agent_spec["llm"]
-    if llm["backend"] == "openai":
-        return AsyncOpenAI()  # picks up OPENAI_API_KEY
-    api_url = llm.get("apiUrl")
-    if not api_url:
-        raise RuntimeError(
-            f"local agent {agent_spec.get('name')!r} missing apiUrl — "
-            "router should have resolved this"
+    backend = llm["backend"]
+    name = agent_spec.get("name")
+
+    if backend == "openai":
+        return OpenAIChatCompletionsModel(
+            model=llm["model"],
+            openai_client=AsyncOpenAI(),  # picks up OPENAI_API_KEY
         )
-    # Local OpenAI-compat endpoints don't need a key, but the SDK requires one.
-    return AsyncOpenAI(base_url=api_url, api_key="local")
 
+    if backend == "local":
+        api_url = llm.get("apiUrl")
+        if not api_url:
+            raise RuntimeError(
+                f"local agent {name!r} missing apiUrl — router should resolve it"
+            )
+        # Local OpenAI-compat endpoints need no key, but the SDK requires one.
+        return OpenAIChatCompletionsModel(
+            model=llm.get("modelName", "local"),
+            openai_client=AsyncOpenAI(base_url=api_url, api_key="local"),
+        )
 
-def llm_model_name(agent_spec: Dict[str, Any]) -> str:
-    llm = agent_spec["llm"]
-    if llm["backend"] == "openai":
-        return llm["model"]
-    # For local backends the apiUrl already targets a specific model; pass a
-    # neutral identifier. Ollama ignores it; DMR routes by the path prefix.
-    return llm.get("modelName", "local")
+    if backend == "provider":
+        if not LITELLM_AVAILABLE:
+            raise RuntimeError(
+                "litellm extension not installed — cannot use provider backend"
+            )
+        provider = llm["provider"]
+        model = llm["model"]
+        # LiteLLM ref format is "<provider>/<model>". Keys come from env.
+        return LitellmModel(model=f"{provider}/{model}")
+
+    raise RuntimeError(f"agent {name!r} has unknown llm backend {backend!r}")
 
 
 class RunRequest(BaseModel):
@@ -160,19 +191,13 @@ def _build_agents(spec: Dict[str, Any]) -> Dict[str, "Agent"]:
     flows: List[Dict[str, str]] = spec.get("communicationFlows", [])
 
     # First pass: build bare Agent instances so we can reference them in tools.
-    # Each agent gets its own OpenAIChatCompletionsModel wrapping the right
-    # client (OpenAI cloud or a local OpenAI-compat endpoint). This is the
-    # supported per-agent wiring in openai-agents SDK 0.0.x.
+    # model_for() picks the right adapter per agent backend (openai / local /
+    # provider-via-LiteLLM).
     for a in spec.get("agents", []):
-        model_client = llm_client_for(a)
-        model = OpenAIChatCompletionsModel(
-            model=llm_model_name(a),
-            openai_client=model_client,
-        )
         agents_by_name[a["name"]] = Agent(
             name=a["name"],
             instructions=a["instructions"],
-            model=model,
+            model=model_for(a),
         )
 
     # Second pass: attach send_message tools + handoff targets per flow.

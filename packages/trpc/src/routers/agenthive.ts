@@ -16,10 +16,43 @@ import {
 import { router, protectedProcedure } from "../trpc";
 import { buildSlug } from "../util/slug";
 
+const llmProviderSchema = z.enum([
+  "anthropic",
+  "gemini",
+  "groq",
+  "mistral",
+  "deepseek",
+  "openrouter",
+  "together_ai",
+  "xai",
+  "fireworks_ai",
+  "cohere",
+]);
+
 const llmSchema = z.discriminatedUnion("backend", [
   z.object({ backend: z.literal("openai"), model: z.string().min(1) }),
+  z.object({
+    backend: z.literal("provider"),
+    provider: llmProviderSchema,
+    model: z.string().min(1),
+  }),
   z.object({ backend: z.literal("local"), modelProjectId: z.string().uuid() }),
 ]);
+
+/** Provider id -> the env var LiteLLM reads for that provider's key.
+ *  openai is handled separately via the existing openaiApiKey path. */
+const PROVIDER_ENV: Record<string, string> = {
+  anthropic: "ANTHROPIC_API_KEY",
+  gemini: "GEMINI_API_KEY",
+  groq: "GROQ_API_KEY",
+  mistral: "MISTRAL_API_KEY",
+  deepseek: "DEEPSEEK_API_KEY",
+  openrouter: "OPENROUTER_API_KEY",
+  together_ai: "TOGETHERAI_API_KEY",
+  xai: "XAI_API_KEY",
+  fireworks_ai: "FIREWORKS_AI_API_KEY",
+  cohere: "COHERE_API_KEY",
+};
 
 const agentDefSchema = z.object({
   name: z
@@ -159,6 +192,10 @@ export const agenthiveRouter = router({
         description: z.string().max(500).optional(),
         spec: specSchema,
         openaiApiKey: z.string().optional(),
+        /** provider id -> API key, for every non-openai provider used by an
+         *  agent. Validated below; never persisted, only passed as container
+         *  env vars. */
+        providerKeys: z.record(llmProviderSchema, z.string().min(1)).optional(),
         cpuLimit: z.string().optional(),
         memoryLimit: z.string().optional(),
       }),
@@ -167,6 +204,37 @@ export const agenthiveRouter = router({
       const localUrls = await resolveLocalModels(input.spec, ctx.user.id);
       const resolvedSpec = resolveSpec(input.spec, localUrls);
       const slug = buildSlug(input.name);
+
+      // Every provider an agent uses must have a key. Build the env-var map the
+      // orchestrator injects into the harness container.
+      const providerKeys = input.providerKeys ?? {};
+      const envKeys: Record<string, string> = {};
+      const usedProviders = new Set(
+        input.spec.agents
+          .filter((a) => a.llm.backend === "provider")
+          .map((a) => (a.llm as { backend: "provider"; provider: string }).provider),
+      );
+      for (const provider of usedProviders) {
+        const key = providerKeys[provider as keyof typeof providerKeys];
+        if (!key) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `missing API key for provider "${provider}"`,
+          });
+        }
+        const envName = PROVIDER_ENV[provider];
+        if (envName) envKeys[envName] = key;
+      }
+      const usesOpenAI = input.spec.agents.some((a) => a.llm.backend === "openai");
+      if (usesOpenAI) {
+        if (!input.openaiApiKey) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "missing OpenAI API key — an agent uses the openai backend",
+          });
+        }
+        envKeys.OPENAI_API_KEY = input.openaiApiKey;
+      }
 
       const [created] = await db
         .insert(swarms)
@@ -189,7 +257,7 @@ export const agenthiveRouter = router({
           slug: created.slug,
           userId: ctx.user.id,
           specJson: JSON.stringify(resolvedSpec),
-          openaiApiKey: input.openaiApiKey,
+          envKeys,
           cpuLimit: input.cpuLimit,
           memoryLimit: input.memoryLimit,
         });
