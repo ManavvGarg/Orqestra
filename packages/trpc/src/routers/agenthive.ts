@@ -112,25 +112,34 @@ const specSchema = z
     }
   });
 
+type ResolvedLocalModel = {
+  /** Docker-network-internal base URL the harness dials. */
+  url: string;
+  /** The model id the runtime knows it by — ollama's tag, e.g. "smollm2:latest".
+   *  Must be sent in the OpenAI-compat request body or the runtime 404s. */
+  modelName: string;
+};
+
 /**
  * Validate that every local-backend agent references a model_project owned by
- * the caller, and return a map of modelProjectId -> apiUrl for the harness.
- * Throws BAD_REQUEST on any unowned id or missing apiUrl.
+ * the caller, and return a map of modelProjectId -> {url, modelName} for the
+ * harness. Throws BAD_REQUEST on any unowned / not-running model.
  */
 async function resolveLocalModels(
   spec: SwarmSpec,
   userId: string,
-): Promise<Map<string, string>> {
+): Promise<Map<string, ResolvedLocalModel>> {
   const localIds = spec.agents
     .filter((a) => a.llm.backend === "local")
     .map((a) => (a.llm as { backend: "local"; modelProjectId: string }).modelProjectId);
-  const out = new Map<string, string>();
+  const out = new Map<string, ResolvedLocalModel>();
   if (localIds.length === 0) return out;
   const rows = await db
     .select({
       id: modelProjects.id,
       apiUrl: modelProjects.apiUrl,
       internalApiUrl: modelProjects.internalApiUrl,
+      runtimeRef: modelProjects.runtimeRef,
       status: modelProjects.status,
     })
     .from(modelProjects)
@@ -161,30 +170,31 @@ async function resolveLocalModels(
         message: `model_project ${id} has no reachable URL — recreate it, then reference it in a swarm`,
       });
     }
-    out.set(id, url);
+    out.set(id, { url, modelName: row.runtimeRef });
   }
   return out;
 }
 
 /**
- * Build a resolved spec where every local agent's llm has an apiUrl field
+ * Build a resolved spec where every local agent's llm has apiUrl + modelName
  * baked in. The DB-stored spec keeps just the modelProjectId (URLs may drift
  * across recreates of the hosted model); the resolved spec is only what the
  * Python harness sees.
  */
-function resolveSpec(spec: SwarmSpec, urls: Map<string, string>): SwarmSpec {
+function resolveSpec(spec: SwarmSpec, resolved: Map<string, ResolvedLocalModel>): SwarmSpec {
   return {
     ...spec,
     agents: spec.agents.map((a) => {
       if (a.llm.backend !== "local") return a;
-      const apiUrl = urls.get(a.llm.modelProjectId);
+      const r = resolved.get(a.llm.modelProjectId);
       return {
         ...a,
         llm: {
           ...a.llm,
-          // SwarmSpec type does not declare apiUrl; harness expects it.
-          apiUrl,
-        } as typeof a.llm & { apiUrl?: string },
+          // SwarmSpec type does not declare these; the harness expects them.
+          apiUrl: r?.url,
+          modelName: r?.modelName,
+        } as typeof a.llm & { apiUrl?: string; modelName?: string },
       };
     }),
   };

@@ -125,9 +125,16 @@ def model_for(agent_spec: Dict[str, Any]):
             raise RuntimeError(
                 f"local agent {name!r} missing apiUrl — router should resolve it"
             )
+        model_name = llm.get("modelName")
+        if not model_name:
+            # Without the runtime's real model id (ollama tag, etc.) the
+            # OpenAI-compat endpoint 404s. Fail loud instead of sending "local".
+            raise RuntimeError(
+                f"local agent {name!r} missing modelName — router should resolve it"
+            )
         # Local OpenAI-compat endpoints need no key, but the SDK requires one.
         return OpenAIChatCompletionsModel(
-            model=llm.get("modelName", "local"),
+            model=model_name,
             openai_client=AsyncOpenAI(base_url=api_url, api_key="local"),
         )
 
@@ -233,7 +240,16 @@ def _build_agents(spec: Dict[str, Any]) -> Dict[str, "Agent"]:
                     "content": {"type": "text", "text": message},
                 })
 
-            result = await Runner.run(target_agent, message)
+            try:
+                result = await Runner.run(target_agent, message)
+            except Exception as e:  # noqa: BLE001
+                # Surface the failure as a visible error event instead of
+                # letting the SDK feed a bare exception back to the caller —
+                # which makes the caller silently retry with rephrased prompts.
+                err = f"{target_name} failed: {e}"
+                if emit is not None:
+                    await emit({"type": "error", "message": err})
+                return f"ERROR: {err}"
             text = result.final_output if result.final_output is not None else ""
             text = text if isinstance(text, str) else str(text)
 
