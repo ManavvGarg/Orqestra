@@ -184,7 +184,11 @@ export const modelProjects = pgTable("model_projects", {
   status: modelProjectStatus("status").notNull().default("pending"),
   containerId: text("container_id"),
   containerPort: integer("container_port"),
+  /** Host-facing URL — reachable from the host / laptop tunnel. */
   apiUrl: text("api_url"),
+  /** Docker-network-internal URL (container name + internal port). Reachable
+   *  from sibling containers such as AgentHive harnesses. */
+  internalApiUrl: text("internal_api_url"),
   /** Container resource limits actually applied. */
   ramLimitMB: integer("ram_limit_mb"),
   cpuLimit: doublePrecision("cpu_limit"),

@@ -130,6 +130,7 @@ async function resolveLocalModels(
     .select({
       id: modelProjects.id,
       apiUrl: modelProjects.apiUrl,
+      internalApiUrl: modelProjects.internalApiUrl,
       status: modelProjects.status,
     })
     .from(modelProjects)
@@ -143,19 +144,24 @@ async function resolveLocalModels(
         message: `local model_project ${id} not owned by user`,
       });
     }
-    if (!row.apiUrl) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: `model_project ${id} has no apiUrl — start it before referencing in a swarm`,
-      });
-    }
     if (row.status !== "running") {
       throw new TRPCError({
         code: "BAD_REQUEST",
         message: `model_project ${id} status is "${row.status}" — must be running`,
       });
     }
-    out.set(id, row.apiUrl);
+    // The harness runs in its own container, so it must use the
+    // docker-network-internal URL (container name), not the host-facing
+    // apiUrl. Fall back to apiUrl for model_projects created before the
+    // internalApiUrl column existed (those need a recreate to work in swarms).
+    const url = row.internalApiUrl ?? row.apiUrl;
+    if (!url) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: `model_project ${id} has no reachable URL — recreate it, then reference it in a swarm`,
+      });
+    }
+    out.set(id, url);
   }
   return out;
 }

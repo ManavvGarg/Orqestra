@@ -189,6 +189,7 @@ export function startModelCreateWorker(): Worker<ModelCreateJob> {
             containerId: result.containerId,
             containerPort: result.containerPort,
             apiUrl: result.apiUrl,
+            internalApiUrl: result.internalApiUrl ?? null,
             updatedAt: new Date(),
           })
           .where(eq(modelProjects.id, j.projectId));

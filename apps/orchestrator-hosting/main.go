@@ -282,9 +282,10 @@ type createReq struct {
 }
 
 type createResp struct {
-	ContainerID   string `json:"containerId"`
-	ContainerPort int    `json:"containerPort"`
-	APIURL        string `json:"apiUrl"`
+	ContainerID    string `json:"containerId"`
+	ContainerPort  int    `json:"containerPort"`
+	APIURL         string `json:"apiUrl"`
+	InternalAPIURL string `json:"internalApiUrl"`
 }
 
 type startReq struct {
@@ -449,8 +450,12 @@ func (s *server) createOllama(ctx context.Context, c *gin.Context, req createReq
 		"OLLAMA_KEEP_ALIVE=24h",
 	}
 
+	// Always attach to the shared docker network so sibling containers (e.g.
+	// AgentHive harnesses) can reach the model by container name, regardless
+	// of localMode. In localMode we additionally host-port-bind for laptop
+	// access; the two are not mutually exclusive.
 	var netCfg *network.NetworkingConfig
-	if !localMode {
+	if s.cfg.TraefikNetwork != "" {
 		netCfg = &network.NetworkingConfig{
 			EndpointsConfig: map[string]*network.EndpointSettings{
 				s.cfg.TraefikNetwork: {},
@@ -521,10 +526,16 @@ func (s *server) createOllama(ctx context.Context, c *gin.Context, req createReq
 		apiURL = fmt.Sprintf("http://%s:%d/v1", host, hostPort)
 	}
 
+	// Container-network-internal URL — what sibling containers (AgentHive
+	// harnesses) must use, since host ports / LAN IPs aren't routable from
+	// inside another container's network namespace.
+	internalAPIURL := fmt.Sprintf("http://%s:%s/v1", containerName, internalPort)
+
 	c.JSON(http.StatusOK, createResp{
-		ContainerID:   resp.ID,
-		ContainerPort: hostPort,
-		APIURL:        apiURL,
+		ContainerID:    resp.ID,
+		ContainerPort:  hostPort,
+		APIURL:         apiURL,
+		InternalAPIURL: internalAPIURL,
 	})
 }
 
@@ -560,10 +571,16 @@ func (s *server) createDMR(ctx context.Context, c *gin.Context, req createReq) {
 	}
 	apiURL := fmt.Sprintf("http://%s:%d/engines/v1", host, port)
 
+	// DMR's gateway runs on the host, not in a container. Sibling containers
+	// reach it via host.docker.internal (Docker Desktop; on Linux compose this
+	// requires `extra_hosts: host-gateway`). Best-effort for swarm use.
+	internalAPIURL := fmt.Sprintf("http://host.docker.internal:%d/engines/v1", port)
+
 	c.JSON(http.StatusOK, createResp{
-		ContainerID:   containerID,
-		ContainerPort: port,
-		APIURL:        apiURL,
+		ContainerID:    containerID,
+		ContainerPort:  port,
+		APIURL:         apiURL,
+		InternalAPIURL: internalAPIURL,
 	})
 }
 

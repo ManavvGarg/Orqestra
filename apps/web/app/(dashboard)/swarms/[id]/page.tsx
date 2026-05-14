@@ -8,7 +8,7 @@ import { AgentBadge, AgentMessageStream, agentColor } from "@/components/agent-m
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Play, Plus, Square, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Play, Plus, Square, Trash2 } from "lucide-react";
 
 export default function SwarmDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -243,6 +243,8 @@ type HistoryMessage = {
 
 function HistoryPanel({ messages }: { messages: HistoryMessage[] }) {
   const [showTrace, setShowTrace] = useState(false);
+  // Collapsed by default — chat stream above is the primary view.
+  const [open, setOpen] = useState(false);
 
   const chatMessages = messages.filter((m) => {
     const c = m.content as { type?: string } | null;
@@ -255,26 +257,41 @@ function HistoryPanel({ messages }: { messages: HistoryMessage[] }) {
   const list = showTrace ? messages : chatMessages;
 
   return (
-    <div className="rounded-md border border-[var(--color-border)] p-3">
-      <div className="mb-3 flex items-center justify-between">
-        <div className="text-xs uppercase tracking-wide text-[var(--color-muted)]">History</div>
-        <label className="flex items-center gap-1.5 text-[10px] text-[var(--color-muted)]">
-          <input
-            type="checkbox"
-            checked={showTrace}
-            onChange={(e) => setShowTrace(e.target.checked)}
-            className="h-3 w-3"
-          />
-          Show tool calls ({traceMessages.length})
-        </label>
+    <div className="rounded-md border border-[var(--color-border)]">
+      <div className="flex items-center justify-between gap-2 px-3 py-2">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-[var(--color-muted)] hover:text-[var(--color-fg)]"
+        >
+          {open ? (
+            <ChevronDown className="h-3.5 w-3.5" />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5" />
+          )}
+          History ({messages.length})
+        </button>
+        {open ? (
+          <label className="flex items-center gap-1.5 text-[10px] text-[var(--color-muted)]">
+            <input
+              type="checkbox"
+              checked={showTrace}
+              onChange={(e) => setShowTrace(e.target.checked)}
+              className="h-3 w-3"
+            />
+            Show tool calls ({traceMessages.length})
+          </label>
+        ) : null}
       </div>
-      <div className="flex flex-col gap-2">
-        {list.length === 0 ? (
-          <div className="text-xs text-[var(--color-muted)]">No messages yet.</div>
-        ) : (
-          list.map((m) => <HistoryRow key={m.id} m={m} />)
-        )}
-      </div>
+      {open ? (
+        <div className="flex flex-col gap-2 border-t border-[var(--color-border)] p-3">
+          {list.length === 0 ? (
+            <div className="text-xs text-[var(--color-muted)]">No messages yet.</div>
+          ) : (
+            list.map((m) => <HistoryRow key={m.id} m={m} />)
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

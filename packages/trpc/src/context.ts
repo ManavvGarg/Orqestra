@@ -74,9 +74,11 @@ export interface OrchestratorClients {
       containerId: string;
       containerPort: number;
       apiUrl: string;
+      internalApiUrl?: string;
     }>;
     start(input: { projectId: string; containerId: string }): Promise<{
       apiUrl?: string;
+      internalApiUrl?: string;
       containerPort?: number;
     }>;
     stop(input: { containerId: string }): Promise<{ ok: true }>;
