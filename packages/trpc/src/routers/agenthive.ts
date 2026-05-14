@@ -200,6 +200,46 @@ function resolveSpec(spec: SwarmSpec, resolved: Map<string, ResolvedLocalModel>)
   };
 }
 
+/**
+ * Build the env-var map the orchestrator injects into the harness container.
+ * Validates that every provider/openai backend used by an agent has a key.
+ */
+function buildEnvKeys(
+  spec: SwarmSpec,
+  openaiApiKey: string | undefined,
+  providerKeys: Record<string, string> | undefined,
+): Record<string, string> {
+  const keys = providerKeys ?? {};
+  const envKeys: Record<string, string> = {};
+  const usedProviders = new Set(
+    spec.agents
+      .filter((a) => a.llm.backend === "provider")
+      .map((a) => (a.llm as { backend: "provider"; provider: string }).provider),
+  );
+  for (const provider of usedProviders) {
+    const key = keys[provider];
+    if (!key) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: `missing API key for provider "${provider}"`,
+      });
+    }
+    const envName = PROVIDER_ENV[provider];
+    if (envName) envKeys[envName] = key;
+  }
+  const usesOpenAI = spec.agents.some((a) => a.llm.backend === "openai");
+  if (usesOpenAI) {
+    if (!openaiApiKey) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "missing OpenAI API key — an agent uses the openai backend",
+      });
+    }
+    envKeys.OPENAI_API_KEY = openaiApiKey;
+  }
+  return envKeys;
+}
+
 export const agenthiveRouter = router({
   create: protectedProcedure
     .input(
@@ -220,37 +260,7 @@ export const agenthiveRouter = router({
       const localUrls = await resolveLocalModels(input.spec, ctx.user.id);
       const resolvedSpec = resolveSpec(input.spec, localUrls);
       const slug = buildSlug(input.name);
-
-      // Every provider an agent uses must have a key. Build the env-var map the
-      // orchestrator injects into the harness container.
-      const providerKeys = input.providerKeys ?? {};
-      const envKeys: Record<string, string> = {};
-      const usedProviders = new Set(
-        input.spec.agents
-          .filter((a) => a.llm.backend === "provider")
-          .map((a) => (a.llm as { backend: "provider"; provider: string }).provider),
-      );
-      for (const provider of usedProviders) {
-        const key = providerKeys[provider as keyof typeof providerKeys];
-        if (!key) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: `missing API key for provider "${provider}"`,
-          });
-        }
-        const envName = PROVIDER_ENV[provider];
-        if (envName) envKeys[envName] = key;
-      }
-      const usesOpenAI = input.spec.agents.some((a) => a.llm.backend === "openai");
-      if (usesOpenAI) {
-        if (!input.openaiApiKey) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "missing OpenAI API key — an agent uses the openai backend",
-          });
-        }
-        envKeys.OPENAI_API_KEY = input.openaiApiKey;
-      }
+      const envKeys = buildEnvKeys(input.spec, input.openaiApiKey, input.providerKeys);
 
       const [created] = await db
         .insert(swarms)
@@ -293,6 +303,96 @@ export const agenthiveRouter = router({
           .update(swarms)
           .set({ status: "errored", updatedAt: new Date() })
           .where(eq(swarms.id, created.id));
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: err instanceof Error ? err.message : "Orchestrator failed",
+        });
+      }
+    }),
+
+  /**
+   * Edit an existing swarm's spec (agents, flows, orchestration) and/or name.
+   * The harness reads its spec from disk at container start, so changing it
+   * means recreating the container: destroy the old one, create a fresh one
+   * with the new spec + env keys. The swarm id and all threads/messages/runs
+   * are preserved (they reference swarmId, not the container).
+   */
+  updateSpec: protectedProcedure
+    .input(
+      z.object({
+        swarmId: z.string().uuid(),
+        name: z.string().min(1).max(80),
+        description: z.string().max(500).optional(),
+        spec: specSchema,
+        openaiApiKey: z.string().optional(),
+        providerKeys: z.record(llmProviderSchema, z.string().min(1)).optional(),
+        cpuLimit: z.string().optional(),
+        memoryLimit: z.string().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const [row] = await db
+        .select()
+        .from(swarms)
+        .where(and(eq(swarms.id, input.swarmId), eq(swarms.userId, ctx.user.id)))
+        .limit(1);
+      if (!row) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const localUrls = await resolveLocalModels(input.spec, ctx.user.id);
+      const resolvedSpec = resolveSpec(input.spec, localUrls);
+      const envKeys = buildEnvKeys(input.spec, input.openaiApiKey, input.providerKeys);
+
+      // Persist the new spec + metadata first, flip to "creating" while the
+      // container is swapped.
+      await db
+        .update(swarms)
+        .set({
+          name: input.name,
+          description: input.description,
+          spec: input.spec,
+          cpuLimit: input.cpuLimit,
+          memoryLimit: input.memoryLimit,
+          status: "creating",
+          updatedAt: new Date(),
+        })
+        .where(eq(swarms.id, row.id));
+
+      // Tear down the old harness container — best-effort, it may already be
+      // gone if the swarm was stopped/destroyed.
+      if (row.containerId) {
+        try {
+          await ctx.orchestrators.agenthive.destroy({ containerId: row.containerId });
+        } catch (err) {
+          console.warn("agenthive.updateSpec: old container destroy failed", err);
+        }
+      }
+
+      try {
+        const result = await ctx.orchestrators.agenthive.create({
+          swarmId: row.id,
+          slug: row.slug,
+          userId: ctx.user.id,
+          specJson: JSON.stringify(resolvedSpec),
+          envKeys,
+          cpuLimit: input.cpuLimit,
+          memoryLimit: input.memoryLimit,
+        });
+        const [updated] = await db
+          .update(swarms)
+          .set({
+            containerId: result.containerId,
+            containerPort: result.containerPort,
+            status: "running",
+            updatedAt: new Date(),
+          })
+          .where(eq(swarms.id, row.id))
+          .returning();
+        return updated!;
+      } catch (err) {
+        await db
+          .update(swarms)
+          .set({ status: "errored", containerId: null, containerPort: null, updatedAt: new Date() })
+          .where(eq(swarms.id, row.id));
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: err instanceof Error ? err.message : "Orchestrator failed",

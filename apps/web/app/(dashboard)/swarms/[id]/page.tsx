@@ -2,13 +2,14 @@
 
 import { use, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "@/lib/auth-client";
 import { AgentBadge, AgentMessageStream, agentColor } from "@/components/agent-message-stream";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ChevronDown, ChevronRight, Play, Plus, Square, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Pencil, Play, Plus, Square, Trash2 } from "lucide-react";
 
 export default function SwarmDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -26,6 +27,7 @@ export default function SwarmDetailPage({ params }: { params: Promise<{ id: stri
 
   const threadsQ = trpc.agenthive.listThreads.useQuery({ swarmId: id }, { enabled: !!swarmQ.data });
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!activeThreadId && threadsQ.data && threadsQ.data.length > 0) {
@@ -33,9 +35,16 @@ export default function SwarmDetailPage({ params }: { params: Promise<{ id: stri
     }
   }, [threadsQ.data, activeThreadId]);
 
+  // Only poll while a run is in flight — the AgentMessageStream WS is the
+  // primary live channel, and onComplete invalidates this query to pull the
+  // final persisted state. Idle pages don't poll at all (was hammering the
+  // api rate limiter: 2s poll = 150 req / 5min window).
   const messagesQ = trpc.agenthive.listMessages.useQuery(
     { threadId: activeThreadId ?? "" },
-    { enabled: !!activeThreadId, refetchInterval: 2000 },
+    {
+      enabled: !!activeThreadId,
+      refetchInterval: activeRunId ? 3000 : false,
+    },
   );
 
   const createThread = trpc.agenthive.createThread.useMutation({
@@ -64,7 +73,6 @@ export default function SwarmDetailPage({ params }: { params: Promise<{ id: stri
   });
 
   const [draft, setDraft] = useState("");
-  const [activeRunId, setActiveRunId] = useState<string | null>(null);
 
   const data = swarmQ.data;
   const isRunning = data?.kind === "swarm" && data.status === "running";
@@ -103,6 +111,13 @@ export default function SwarmDetailPage({ params }: { params: Promise<{ id: stri
       ) : null}
 
       <div className="mb-6 flex flex-wrap gap-2">
+        {data.status !== "destroyed" ? (
+          <Button asChild variant="outline">
+            <Link href={`/swarms/${data.id}/edit` as any}>
+              <Pencil className="h-3.5 w-3.5" /> Edit
+            </Link>
+          </Button>
+        ) : null}
         {data.status === "stopped" ? (
           <Button
             variant="outline"
