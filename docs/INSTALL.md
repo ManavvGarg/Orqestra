@@ -132,8 +132,20 @@ sudo rm -rf /opt/orqestra
 
 Docker images stay cached — `docker image prune -a` if you want them gone.
 
+## What you get
+
+The dashboard exposes four workload types:
+
+- **Jupyter** — notebook containers (Base / TensorFlow / PyTorch / R) with persistent volumes and GPU passthrough.
+- **Models** — host any model from the catalog (Ollama / Docker Model Runner); each gets an OpenAI-compatible endpoint.
+- **Sandboxes** — disposable Linux containers you SSH into, with a generated keypair.
+- **Swarms (AgentHive)** — multi-agent orchestration; agents run on OpenAI, any LiteLLM provider, or your hosted local models.
+
 ## Known issues
 
 - **First Docker build takes 5–15 minutes.** Pulling 4 Jupyter images (~15 GB total) + Ollama + building TS apps. Subsequent boots reuse cache.
+- **First swarm create is slow.** AgentHive builds its Python harness image once on the first swarm; cached after.
+- **AgentHive provider keys** (OpenAI / Anthropic / Gemini / …) are entered per-swarm in the UI and live only in the swarm container's env — never written to the database. Re-enter them when editing a swarm.
+- **Sandboxes are localhost-only in this release** — public SSH routing is on the roadmap.
 - **Cloudflare zone must exist on the account** for auto-DNS mode. Otherwise the script falls back to manual.
 - **Docker group membership.** If `install.sh` just installed Docker, you may need `newgrp docker` or re-login before `docker` works without sudo. The installer itself runs docker via sudo to sidestep this.

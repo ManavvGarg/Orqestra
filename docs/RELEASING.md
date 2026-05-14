@@ -6,8 +6,7 @@
 
 ```bash
 # 1. Confirm clean state
-pnpm typecheck
-go vet ./apps/orchestrator-jupyter/... ./apps/orchestrator-hosting/...
+pnpm typecheck   # all workspaces — runs go vet for every orchestrator
 
 # 2. Tag + push
 git tag v0.2.0 && git push origin main v0.2.0
@@ -43,7 +42,7 @@ end user runs:  curl -fsSL https://orqestra.xyz/install.sh | bash
 |---|------|-----|
 | 1 | Update `CHANGELOG.md` | Users want to know what changed |
 | 2 | `pnpm typecheck` clean | Catches TS regressions |
-| 3 | `go vet ./...` in both orchestrators | Catches Go regressions |
+| 3 | `go vet ./...` in all four orchestrators (covered by `pnpm typecheck`) | Catches Go regressions |
 | 4 | Smoke-test: `bash scripts/install.sh --mode local --dir /tmp/orq-test` | Catches install.sh regressions |
 | 5 | `git tag vX.Y.Z && git push origin main vX.Y.Z` | Release point |
 | 6 | `gh release create vX.Y.Z --notes-file CHANGELOG.md` (optional) | Renders changelog on GitHub |

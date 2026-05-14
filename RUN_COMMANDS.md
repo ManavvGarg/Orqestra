@@ -44,6 +44,8 @@ pnpm --filter @orqestra/db db:push
 # Tidy Go modules (after go.mod edits)
 cd apps/orchestrator-jupyter && go mod tidy && cd -
 cd apps/orchestrator-hosting && go mod tidy && cd -
+cd apps/orchestrator-sandbox && go mod tidy && cd -
+cd apps/orchestrator-agenthive && go mod tidy && cd -
 ```
 
 ---
@@ -70,9 +72,9 @@ sudo docker compose down -v
 
 ---
 
-## Services — 5 terminals
+## Services — 7 terminals
 
-Open 5 terminals on `houdini`. Each needs `set -a; source .env; set +a` first (or use `orq` alias).
+Open 7 terminals on `houdini`. Each needs `set -a; source .env; set +a` first (or use `orq` alias).
 
 ### T1 — API (Bun + Hono + tRPC + BullMQ, :4000)
 
@@ -131,6 +133,34 @@ PORT=8081 \
 go run .
 ```
 
+### T6 — Sandbox orchestrator (Go, :8082)
+
+```bash
+cd ~/projects/Orqestra/apps/orchestrator-sandbox
+set -a; source ~/projects/Orqestra/.env; set +a
+SITE_DOMAIN=localhost \
+LOCAL_BIND_IP=0.0.0.0 \
+LOCAL_PUBLIC_HOST=192.168.1.4 \
+REDIS_URL=redis://localhost:6379 \
+PORT=8082 \
+go run .
+```
+
+### T7 — AgentHive orchestrator (Go, :8083)
+
+```bash
+cd ~/projects/Orqestra/apps/orchestrator-agenthive
+set -a; source ~/projects/Orqestra/.env; set +a
+SITE_DOMAIN=localhost \
+LOCAL_BIND_IP=0.0.0.0 \
+LOCAL_PUBLIC_HOST=192.168.1.4 \
+REDIS_URL=redis://localhost:6379 \
+PORT=8083 \
+go run .
+```
+
+> First swarm create builds the Python harness image (`orqestra-agenthive-runtime:latest`) — slow once, cached after. Per-swarm harness containers and the model/sandbox containers must share a docker network with the orchestrator; in compose that's `proxy`. Running orchestrators on the host (as above) only works for swarms whose agents are all OpenAI/provider-backed — local-model agents need the harness to reach the model container, so use the compose stack for that path.
+
 ---
 
 ## Laptop SSH tunnel (separate terminal on laptop)
@@ -155,11 +185,13 @@ Jupyter container ports come from `LOCAL_PUBLIC_HOST=<houdini-ip>` directly — 
 ## Health checks
 
 ```bash
-curl localhost:4000/health    # api      → {"ok":true,...}
-curl localhost:4001/health    # ws       → {"ok":true}
-curl localhost:8080/health    # jupyter  → {"ok":true}
-curl localhost:8081/health    # hosting  → {"ok":true}
-curl -I localhost:3000        # web      → 200
+curl localhost:4000/health    # api       → {"ok":true,...}
+curl localhost:4001/health    # ws        → {"ok":true}
+curl localhost:8080/health    # jupyter   → {"ok":true}
+curl localhost:8081/health    # hosting   → {"ok":true}
+curl localhost:8082/health    # sandbox   → {"ok":true}
+curl localhost:8083/health    # agenthive → {"ok":true}
+curl -I localhost:3000        # web       → 200
 curl -s localhost:12434/engines/v1/models | jq    # DMR gateway
 ```
 
@@ -217,11 +249,15 @@ pnpm --filter @orqestra/api typecheck   # one app
 # All Orqestra containers
 sudo docker ps --filter label=orqestra.kind
 
-# Just Jupyter
+# By kind: jupyter | model | sandbox | swarm
 sudo docker ps --filter label=orqestra.kind=jupyter
+sudo docker ps --filter label=orqestra.kind=sandbox
+sudo docker ps --filter label=orqestra.kind=swarm
 
 # Live logs of one container
 sudo docker logs -f orqestra-jupyter-<slug>
+sudo docker logs -f orqestra-sandbox-<slug>
+sudo docker logs -f orqestra-agenthive-<slug>
 
 # Resource stats
 sudo docker stats orqestra-jupyter-<slug>
@@ -231,6 +267,10 @@ SLUG=<slug>
 USERID_NODASHES=$(echo $USER_UUID | tr -d '-')
 sudo docker rm -f orqestra-jupyter-$SLUG
 sudo docker volume rm orqestra_${USERID_NODASHES}_$SLUG
+
+# Force a rebuild of the AgentHive harness image (picks up harness changes)
+sudo docker image rm -f orqestra-agenthive-runtime:latest
+sudo docker ps -a --filter label=orqestra.kind=swarm -q | xargs -r sudo docker rm -f
 ```
 
 ---
@@ -254,7 +294,7 @@ sudo docker compose down -v                    # stop + DELETE volumes (destroys
 ## Stop everything
 
 ```bash
-# Ctrl+C in each app terminal (T1-T5)
+# Ctrl+C in each app terminal (T1-T7)
 # Ctrl+C the laptop SSH tunnel
 sudo docker compose stop postgres redis
 
@@ -277,7 +317,7 @@ alias orq='cd ~/projects/Orqestra && set -a && source .env && set +a'
 alias orq-up='cd ~/projects/Orqestra && sudo docker compose up -d postgres redis'
 alias orq-down='cd ~/projects/Orqestra && sudo docker compose stop postgres redis'
 alias orq-ps='sudo docker ps --filter label=orqestra.kind --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"'
-alias orq-health='for p in 4000 4001 8080 8081 12434; do echo -n "$p: "; curl -s -o /dev/null -w "%{http_code}\n" localhost:$p/health 2>/dev/null || echo down; done'
+alias orq-health='for p in 4000 4001 8080 8081 8082 8083 12434; do echo -n "$p: "; curl -s -o /dev/null -w "%{http_code}\n" localhost:$p/health 2>/dev/null || echo down; done'
 ```
 
 ---
@@ -296,5 +336,9 @@ alias orq-health='for p in 4000 4001 8080 8081 12434; do echo -n "$p: "; curl -s
 | DMR gateway connection refused | `sudo docker port docker-model-runner` to confirm port; set `DMR_HOST_PORT` |
 | pnpm lockfile drift after pull | `rm -rf node_modules pnpm-lock.yaml && pnpm install` |
 | Go toolchain auto-upgrades | `go env -w GOTOOLCHAIN=local` (or install Go 1.25 cleanly) |
-| Detail page log panel empty | Orchestrator started without `REDIS_URL=redis://localhost:6379`. Restart T4/T5 with that env var. |
+| Detail page log panel empty | Orchestrator started without `REDIS_URL=redis://localhost:6379`. Restart T4–T7 with that env var. |
 | Tail logs manually | `sudo docker compose exec redis redis-cli PSUBSCRIBE 'container-logs:*'` |
+| Swarm agent on a local model 404s / unreachable | Harness can't reach the model container. Use the compose stack (shared `proxy` net); recreate the model project so it has `internal_api_url`, then recreate the swarm. |
+| `<model> does not support tools` | Tiny models (e.g. smollm2:135m) can't function-call. Either drop that agent's outgoing flows so it carries no tools, or use a tool-capable model (qwen2.5, llama3.1, mistral). |
+| Swarm harness build fails on `apt`/`pip` DNS | Docker build-container DNS broken. Set daemon DNS (`/etc/docker/daemon.json` → `"dns": ["8.8.8.8","1.1.1.1"]`), restart Docker. |
+| 429 Too Many Requests on `/trpc/*` | API rate limiter (100 req / 5 min). Wait out the window or `sudo docker compose restart api`. |

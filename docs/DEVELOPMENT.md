@@ -15,7 +15,7 @@ If you just want to install + run Orqestra, use [INSTALL.md](INSTALL.md) instead
 | Node.js | 20+ | pnpm + Drizzle Kit + Next.js |
 | pnpm | 9+ | Monorepo package manager |
 | Bun | 1.1+ | Runs the API + WS apps |
-| Go | 1.25+ | Both orchestrators |
+| Go | 1.25+ | All four orchestrators (jupyter, hosting, sandbox, agenthive) |
 | Docker + compose | 24+ | Runs Postgres + Redis + everything else |
 | Git, openssl | any | Clone + secret generation |
 
@@ -51,10 +51,15 @@ BETTER_AUTH_URL=http://localhost:4000
 INTERNAL_API_SECRET=$(openssl rand -hex 32)
 ORCHESTRATOR_JUPYTER_URL=http://localhost:8080
 ORCHESTRATOR_HOSTING_URL=http://localhost:8081
+ORCHESTRATOR_SANDBOX_URL=http://localhost:8082
+ORCHESTRATOR_AGENTHIVE_URL=http://localhost:8083
+INTERNAL_API_CALLBACK_BASE=http://api:4000
 SITE_DOMAIN=localhost
 NEXT_PUBLIC_API_URL=http://localhost:4000
 NEXT_PUBLIC_WS_URL=ws://localhost:4001
 ```
+
+> `INTERNAL_API_CALLBACK_BASE` is the URL the AgentHive Python harness uses to call back into the API to persist agent messages. In compose it's `http://api:4000`; running the API on the host instead, use `http://<host-lan-ip>:4000`.
 
 Generate secrets with:
 
@@ -113,9 +118,27 @@ LOCAL_BIND_IP=0.0.0.0 \
 LOCAL_PUBLIC_HOST=$(hostname -I | awk '{print $1}') \
 REDIS_URL=redis://localhost:6379 \
 PORT=8081 go run .
+
+# T6 Sandbox orchestrator
+cd apps/orchestrator-sandbox
+SITE_DOMAIN=localhost \
+LOCAL_BIND_IP=0.0.0.0 \
+LOCAL_PUBLIC_HOST=$(hostname -I | awk '{print $1}') \
+REDIS_URL=redis://localhost:6379 \
+PORT=8082 go run .
+
+# T7 AgentHive orchestrator
+cd apps/orchestrator-agenthive
+SITE_DOMAIN=localhost \
+LOCAL_BIND_IP=0.0.0.0 \
+LOCAL_PUBLIC_HOST=$(hostname -I | awk '{print $1}') \
+REDIS_URL=redis://localhost:6379 \
+PORT=8083 go run .
 ```
 
 Each terminal needs `set -a; source .env; set +a` first (or `orq` alias from RUN_COMMANDS).
+
+> AgentHive note: the orchestrator builds a Python harness image on first swarm create and runs one harness container per swarm. Swarms using **local-model** agents need the harness to reach the model container over a shared docker network — run the full compose stack for that path rather than host-mode orchestrators.
 
 Open http://localhost:3000 in a browser → register → done.
 
@@ -139,18 +162,21 @@ This builds + boots every service (Traefik, api, ws, orchestrators, web) inside 
 | Add DB column | Edit `packages/db/src/schema.ts`, then `pnpm --filter @orqestra/db db:push` |
 | Inspect DB | `pnpm --filter @orqestra/db db:studio` opens Drizzle Studio |
 | Add Web page | Drop into `apps/web/app/(dashboard)/...`, hot-reloads |
-| Modify Go orchestrator | Ctrl+C T4 or T5, `go run .` again |
+| Modify Go orchestrator | Ctrl+C T4–T7, `go run .` again |
+| Modify AgentHive harness (`harness.go`) | Rebuild orchestrator, then `docker image rm -f orqestra-agenthive-runtime:latest` so it rebuilds; recreate affected swarms |
 | Type-check everything | `pnpm typecheck` |
 
 ## Project layout
 
 ```
 apps/
-  api/                   # Bun + Hono + tRPC + BullMQ
-  ws/                    # Bun WebSocket
-  orchestrator-jupyter/  # Go + Gin (creates Jupyter containers)
-  orchestrator-hosting/  # Go + Gin (creates Ollama containers + DMR)
-  web/                   # Next.js 15
+  api/                    # Bun + Hono + tRPC + BullMQ
+  ws/                     # Bun WebSocket
+  orchestrator-jupyter/   # Go + Gin (creates Jupyter containers)
+  orchestrator-hosting/   # Go + Gin (creates Ollama containers + DMR)
+  orchestrator-sandbox/   # Go + Gin (SSH Linux sandboxes)
+  orchestrator-agenthive/ # Go + Gin (multi-agent swarms; embeds Python harness)
+  web/                    # Next.js 15
 
 packages/
   db/      # Drizzle schema + client + migrations
@@ -183,9 +209,11 @@ There are none yet — this is v0.1. The verify step in `install.sh` (curl healt
 | `network proxy not found` | `docker network create proxy` |
 | Bun compile error after editing tRPC | Cold-restart T1, hot reload doesn't always pick up router changes |
 | Go orchestrator can't reach Docker socket | Add user to `docker` group + `newgrp docker` |
-| Empty log panel on detail page | Restart T4/T5 with `REDIS_URL=redis://localhost:6379` |
+| Empty log panel on detail page | Restart T4–T7 with `REDIS_URL=redis://localhost:6379` |
 | pnpm lockfile drift | `rm -rf node_modules pnpm-lock.yaml && pnpm install` |
 | Go toolchain auto-upgrades to newer than installed | `go env -w GOTOOLCHAIN=local` |
+| Swarm agent on a local model unreachable / 404 | Run the compose stack so the harness shares the `proxy` net with the model container; recreate the model project, then the swarm |
+| `<model> does not support tools` | Use a tool-capable model, or remove that agent's outgoing flows so it carries no tools |
 
 Full troubleshooting table in [RUN_COMMANDS.md](../RUN_COMMANDS.md).
 
@@ -196,8 +224,13 @@ PRs welcome. Small focused changes preferred over sweeping refactors.
 Before opening a PR:
 
 ```bash
-pnpm typecheck   # all workspaces compile
-go vet ./apps/orchestrator-jupyter/... && go vet ./apps/orchestrator-hosting/...
+pnpm typecheck   # all workspaces — includes `go vet` for every orchestrator
+```
+
+Each orchestrator's `pnpm typecheck` runs `go vet ./...`. To vet one directly:
+
+```bash
+cd apps/orchestrator-agenthive && go vet ./...
 ```
 
 If your change touches the schema, also run `pnpm --filter @orqestra/db db:push` against a fresh Postgres so you confirm the migration applies cleanly.
