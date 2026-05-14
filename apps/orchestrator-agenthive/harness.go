@@ -4,14 +4,14 @@ package main
 // writes them into a tarball at startup and feeds it to docker ImageBuild.
 
 const harnessDockerfile = `FROM python:3.12-slim
+# No apt-get step: python:3.12-slim already ships ca-certificates (all the
+# harness needs for outbound TLS to OpenAI / Anthropic / etc.), and curl is
+# unused. Skipping apt also avoids depending on Debian mirror DNS at build.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DEFAULT_TIMEOUT=120
-RUN apt-get update && apt-get install -y --no-install-recommends \
-      curl ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 RUN python -m pip install --upgrade pip
 COPY requirements.txt /app/requirements.txt
