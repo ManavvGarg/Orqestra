@@ -117,8 +117,40 @@ export default function NewSwarmPage() {
     setAgents((a) => a.map((x, i) => (i === idx ? { ...x, ...patch } : x)));
   }
 
+  // Renaming an agent must cascade into every reference: communication flows
+  // and the entry-agent selection. Otherwise the spec fails validation with
+  // "flow.to <old name> not in agents".
+  function renameAgent(idx: number, rawName: string) {
+    const newName = rawName.replace(/[^a-zA-Z0-9_]/g, "");
+    setAgents((prev) => {
+      const oldName = prev[idx]?.name;
+      if (oldName === undefined) return prev;
+      const next = prev.map((x, i) => (i === idx ? { ...x, name: newName } : x));
+      if (oldName && oldName !== newName) {
+        setFlows((fs) =>
+          fs.map((f) => ({
+            ...f,
+            from: f.from === oldName ? newName : f.from,
+            to: f.to === oldName ? newName : f.to,
+          })),
+        );
+        setEntryAgent((e) => (e === oldName ? newName : e));
+      }
+      return next;
+    });
+  }
+
   function removeAgent(idx: number) {
-    setAgents((a) => a.filter((_, i) => i !== idx));
+    setAgents((a) => {
+      const removed = a[idx]?.name;
+      const next = a.filter((_, i) => i !== idx);
+      if (removed) {
+        // Drop flows touching the removed agent; reset entry if it pointed here.
+        setFlows((fs) => fs.filter((f) => f.from !== removed && f.to !== removed));
+        setEntryAgent((e) => (e === removed ? (next[0]?.name ?? "") : e));
+      }
+      return next;
+    });
   }
 
   function setBackend(idx: number, backend: LlmDraft["backend"]) {
@@ -222,9 +254,7 @@ export default function NewSwarmPage() {
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <Input
                     value={a.name}
-                    onChange={(e) =>
-                      updateAgent(i, { name: e.target.value.replace(/[^a-zA-Z0-9_]/g, "") })
-                    }
+                    onChange={(e) => renameAgent(i, e.target.value)}
                     placeholder="agent_identifier"
                     className="max-w-[14rem] font-mono"
                   />
